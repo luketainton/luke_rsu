@@ -1,5 +1,5 @@
 FROM ghcr.io/astral-sh/uv:0.8.9 AS uv
-FROM python:3.13-slim
+FROM python:3.14-slim
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 UV_COMPILE_BYTECODE=1
 WORKDIR /app
 COPY --from=uv /uv /uvx /bin/

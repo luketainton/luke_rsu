@@ -9,4 +9,4 @@ jobs:
   quality:
     uses: git.tainton.uk/actions/gha-workflows/.gitea/workflows/ci-python-uv-with-docker.yml@main
     with:
-      python-version: "3.13"
+      python-version: "3.14"
