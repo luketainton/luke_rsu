@@ -13,7 +13,7 @@ All information lives in browser local storage. **Export CSV** regularly; no dat
 
 ## Exchange rates
 
-Every vest and sale keeps its own GBP-per-USD rate: both the acquisition/taxable amount and disposal proceeds are converted into sterling at their respective dates. The **HMRC rates** button stores published-period rates (entered as HMRC's `USD per GBP` quote) and links the selected period and source URL to a transaction. You can still enter a spot or broker rate directly.
+Every vest and sale keeps its own GBP-per-USD rate: both the acquisition/taxable amount and disposal proceeds are converted into sterling at their respective dates. The **HMRC rate sources** button stores published [spot](https://www.trade-tariff.service.gov.uk/exchange_rates/spot), [monthly](https://www.trade-tariff.service.gov.uk/exchange_rates/monthly), or [average](https://www.trade-tariff.service.gov.uk/exchange_rates/average) rates (entered as HMRC's `USD per GBP` quote) and links the selected type, period and source URL to a transaction. You can still enter a spot or broker rate directly.
 
 HMRC does not prescribe a single CGT exchange-rate reference point; use a reasonable, consistent method and retain the evidence. HMRC's average-rate publications cover rolling 12-month periods ending 31 March and 31 December; their monthly-rate service is intended for customs valuation. Do not use a later rate to convert a final USD gain—all costs and proceeds are converted separately on their relevant dates.
 
