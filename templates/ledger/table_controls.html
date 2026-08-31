@@ -1,0 +1,6 @@
+<form method="get" class="actions" aria-label="Table controls">
+  <label>Search<input type="search" name="q" value="{{ q }}" placeholder="Search records"></label>
+  <label>Sort<select name="sort">{% for value, label in sort_options %}<option value="{{ value }}"{% if sort == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <button type="submit">Apply</button>
+  <a href="{{ request.path }}">Clear</a>
+</form>

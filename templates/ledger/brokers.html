@@ -4,6 +4,7 @@
   <h1>Brokers</h1>
   <p class="muted">Brokers are available only within this workspace.</p>
   <p><a href="{% url 'add_broker' %}?next={{ request.get_full_path|urlencode }}"><button>Add broker</button></a> <a href="{% url 'dashboard' %}">Back to ledger</a></p>
+  {% include "ledger/table_controls.html" %}
   <div class="table-scroll"><table>
     <tr><th>Name</th><th>Actions</th></tr>
     {% for broker in brokers %}<tr><td>{{ broker.name }}</td><td><a href="{% url 'edit_broker' broker.id %}?next={{ request.get_full_path|urlencode }}">Edit</a> · <a href="{% url 'delete_broker' broker.id %}?next={{ request.get_full_path|urlencode }}">Delete</a></td></tr>

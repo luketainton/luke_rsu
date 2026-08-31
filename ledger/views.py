@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
+from django.db.models import Q
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -88,38 +89,122 @@ def dashboard(request):
     return render(request, "ledger/dashboard.html", context)
 
 
-def list_records(request, model, template, context_name, order_by):
+def filtered_table(request, queryset, search_fields, sort_options, default_sort):
+    """Apply safe, workspace-scoped text search and ordering to a table."""
+    search = request.GET.get("q", "").strip()
+    if search:
+        filters = Q()
+        for field in search_fields:
+            filters |= Q(**{f"{field}__icontains": search})
+        queryset = queryset.filter(filters)
+    allowed_sorts = {value for value, _ in sort_options}
+    sort = request.GET.get("sort", default_sort)
+    if sort not in allowed_sorts:
+        sort = default_sort
+    return queryset.order_by(sort), search, sort
+
+
+def list_records(request, model, template, context_name, sort_options, default_sort):
     member = private_membership(request.user)
-    records = (
-        model.objects.filter(workspace=member.workspace).select_related("broker").order_by(order_by)
+    records, search, sort = filtered_table(
+        request,
+        model.objects.filter(workspace=member.workspace).select_related("broker"),
+        ["grant_id", "broker__name", "notes"],
+        sort_options,
+        default_sort,
     )
-    return render(request, template, {"membership": member, context_name: records})
+    return render(
+        request,
+        template,
+        {
+            "membership": member,
+            context_name: records,
+            "q": search,
+            "sort": sort,
+            "sort_options": sort_options,
+        },
+    )
 
 
 @login_required
 def grant_list(request):
-    return list_records(request, Grant, "ledger/grants.html", "grants", "-date")
+    return list_records(
+        request,
+        Grant,
+        "ledger/grants.html",
+        "grants",
+        [
+            ("-date", "Newest first"),
+            ("date", "Oldest first"),
+            ("grant_id", "Grant ID"),
+            ("broker__name", "Broker"),
+            ("-units", "Most units"),
+        ],
+        "-date",
+    )
 
 
 @login_required
 def vest_list(request):
-    return list_records(request, Vest, "ledger/vests.html", "vests", "-date")
+    return list_records(
+        request,
+        Vest,
+        "ledger/vests.html",
+        "vests",
+        [
+            ("-date", "Newest first"),
+            ("date", "Oldest first"),
+            ("grant_id", "Grant ID"),
+            ("broker__name", "Broker"),
+            ("-units", "Most units"),
+        ],
+        "-date",
+    )
 
 
 @login_required
 def sale_list(request):
-    return list_records(request, Sale, "ledger/sales.html", "sales", "-date")
+    return list_records(
+        request,
+        Sale,
+        "ledger/sales.html",
+        "sales",
+        [
+            ("-date", "Newest first"),
+            ("date", "Oldest first"),
+            ("grant_id", "Grant ID"),
+            ("broker__name", "Broker"),
+            ("-units", "Most units"),
+        ],
+        "-date",
+    )
 
 
 @login_required
 def rate_list(request):
     member = private_membership(request.user)
+    sort_options = [
+        ("-ends_on", "Latest period first"),
+        ("ends_on", "Earliest period first"),
+        ("label", "Label"),
+        ("method", "Method"),
+    ]
+    rates, search, sort = filtered_table(
+        request,
+        FxRate.objects.filter(workspace=member.workspace),
+        ["label", "method"],
+        sort_options,
+        "-ends_on",
+    )
     return render(
         request,
         "ledger/rates.html",
         {
             "membership": member,
-            "rates": FxRate.objects.filter(workspace=member.workspace).order_by("-ends_on"),
+            "rates": rates,
+            "q": search,
+            "sort": sort,
+            "sort_options": sort_options,
         },
     )
 
@@ -235,10 +320,18 @@ def broker_management(request):
     member = private_membership(request.user)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
+    sort_options = [("name", "Name A–Z"), ("-name", "Name Z–A")]
+    brokers, search, sort = filtered_table(
+        request,
+        Broker.objects.filter(workspace=member.workspace),
+        ["name"],
+        sort_options,
+        "name",
+    )
     return render(
         request,
         "ledger/brokers.html",
-        {"brokers": Broker.objects.filter(workspace=member.workspace)},
+        {"brokers": brokers, "q": search, "sort": sort, "sort_options": sort_options},
     )
 
 

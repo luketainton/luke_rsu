@@ -188,6 +188,41 @@ class WorkspaceIsolationTests(TestCase):
         self.assertContains(response, reverse("edit_grant", args=[grant.id]))
         self.assertContains(response, reverse("vest_list"))
 
+    def test_grant_list_filters_and_sorts_workspace_records(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        broker = Broker.objects.create(workspace=workspace, name="Charles Schwab")
+        Grant.objects.create(
+            workspace=workspace,
+            date=date(2026, 3, 1),
+            units=2,
+            grant_id="ALPHA-1",
+            broker=broker,
+        )
+        Grant.objects.create(
+            workspace=workspace,
+            date=date(2026, 3, 2),
+            units=10,
+            grant_id="ALPHA-2",
+            broker=broker,
+        )
+        Grant.objects.create(
+            workspace=workspace,
+            date=date(2026, 3, 3),
+            units=20,
+            grant_id="BETA-1",
+        )
+        self.client.force_login(self.bob)
+
+        response = self.client.get(reverse("grant_list"), {"q": "alpha", "sort": "-units"})
+        self.assertContains(response, "ALPHA-1")
+        self.assertContains(response, "ALPHA-2")
+        self.assertNotContains(response, "BETA-1")
+        self.assertLess(response.content.find(b"ALPHA-2"), response.content.find(b"ALPHA-1"))
+        self.assertContains(response, "Table controls")
+
+        response = self.client.get(reverse("grant_list"), {"sort": "not-a-field"})
+        self.assertEqual(response.status_code, 200)
+
     def test_dashboard_shows_compact_summary_and_record_pages_are_isolated(self):
         own_grant = Grant.objects.create(
             workspace=self.bob.workspace_memberships.get().workspace,
