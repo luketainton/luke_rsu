@@ -1,70 +1,61 @@
 # RSU Ledger UK
 
-A small, local-first ledger for a UK taxpayer receiving USD-denominated RSUs. It records grants, vesting and sales, converts each event to GBP using the rate you enter, and provides a transparent share-matching CGT estimate.
+A private, self-hosted Django application for UK employees who receive USD-denominated RSUs. It records grants, taxable vesting events, disposals and the GBP conversion evidence needed for a CGT working file.
 
-## Deployment (Docker Compose)
+## Stack
 
-This release persists data in PostgreSQL and is intended to be run behind an HTTPS reverse proxy.
+- Python 3.13, Django 5.2 and PostgreSQL
+- `uv` for dependency locking and execution
+- Django admin, session authentication and CSRF protection
+- Optional generic OIDC login through django-allauth, using authorization code + PKCE
+- Docker Compose for deployment
+
+## Deploy
 
 ```sh
 cp .env.example .env
-# edit secrets, APP_URL and (optionally) OIDC settings
+# set strong POSTGRES_PASSWORD and DJANGO_SECRET_KEY, plus your external hostname
 docker compose up -d --build
 ```
 
-Visit `APP_URL`, then use **Create first administrator** once. The bootstrap endpoint closes as soon as the first user is created. Back up the named `rsu-postgres` Docker volume as part of your normal backup regime.
+Create the first local administrator with `docker compose exec app uv run python manage.py createsuperuser`. Visit `/admin/` to create/manage users and inspect records. Back up the named `rsu-postgres` volume.
 
-`AUTH_MODE=local` provides password sign-in. `AUTH_MODE=oidc` requires an OIDC provider; `hybrid` enables both. Register the redirect URI as:
+For OIDC, set `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`; then register this callback URL with the provider:
 
 ```text
-https://your-rsu-host/auth/oidc/callback
+https://your-rsu-host/accounts/oidc/company/login/callback/
 ```
 
-The OIDC client must be confidential and use the Authorization Code flow. Set `APP_URL` to the external HTTPS URL so the callback and secure session cookie are correct.
+The client should be confidential and use the authorization-code flow. The generic OpenID Connect integration uses PKCE and fetches the provider's userinfo claims.
 
-## Users, permissions and data isolation
+## Roles and data separation
 
-Each user receives their own private workspace and ledger when first created or authenticated. Ledger reads and writes require an explicit workspace-membership check in the API; a user cannot retrieve another workspace by guessing its ID.
+Every new user receives a separate private workspace. All grants, vests, sales and exchange-rate records are foreign-keyed to a workspace. Views derive the workspace only from the authenticated user’s membership, never from a browser-supplied workspace identifier.
 
-- **Owner** — can read/write the workspace and grant/revoke member access.
-- **Editor** — can read/write the workspace.
-- **Viewer** — can read only.
-- **System administrator** — can create local users through `POST /api/users`; this does not grant access to their private workspaces.
+- **Owner** — view/edit records and manage workspace membership.
+- **Editor** — view/edit records.
+- **Viewer** — view records only.
+- **Django staff/superuser** — manage users and records via `/admin/`; becoming staff does not automatically join private workspaces.
 
-Workspace membership routes are available at `/api/workspaces/:workspaceId/members` to workspace owners. A user must authenticate at least once before an owner can invite their email address. This deliberate constraint prevents an invite from silently creating an unverified account.
+An owner can grant or change access from **Manage access**. A user must sign in once before their email can be invited, preventing unverified automatic account creation.
 
-The browser client saves changes through the authenticated API; it no longer treats browser local storage as the authoritative copy. The server stores a ledger document per workspace in PostgreSQL and session cookies are `HttpOnly`, `SameSite=Lax` and marked `Secure` in production.
-
-## Run locally without Docker
+## Local development
 
 ```sh
-npm install
-npm run db:migrate
-npm run dev
+uv sync --group dev
+export POSTGRES_HOST=localhost POSTGRES_PASSWORD=your-password
+uv run python manage.py migrate
+uv run python manage.py runserver
 ```
 
-Set `DATABASE_URL`, `SESSION_SECRET` and `APP_URL` first (see `.env.example`). Start the deployable server with `npm run build && npm start`.
+Run quality checks with `uv run ruff check .`, `uv run python manage.py check`, and `uv run pytest`.
 
-**Export CSV** regularly. Your ledger is persisted to the configured PostgreSQL database; no third-party application receives the ledger data.
+## Tax scope
 
-## Exchange rates
+This is a record-keeping aid, not tax advice or a completed Self Assessment return. Retain employer/broker documents and the FX source for every event. The current UI is deliberately conservative: it records the values needed to prepare a CGT working file rather than presenting a final tax liability.
 
-Every vest and sale keeps its own GBP-per-USD rate: both the acquisition/taxable amount and disposal proceeds are converted into sterling at their respective dates. The **HMRC rate sources** button stores published [spot](https://www.trade-tariff.service.gov.uk/exchange_rates/spot), [monthly](https://www.trade-tariff.service.gov.uk/exchange_rates/monthly), or [average](https://www.trade-tariff.service.gov.uk/exchange_rates/average) rates (entered as HMRC's `USD per GBP` quote) and links the selected type, period and source URL to a transaction. You can still enter a spot or broker rate directly.
+Useful references:
 
-HMRC does not prescribe a single CGT exchange-rate reference point; use a reasonable, consistent method and retain the evidence. HMRC's average-rate publications cover rolling 12-month periods ending 31 March and 31 December; their monthly-rate service is intended for customs valuation. Do not use a later rate to convert a final USD gain—all costs and proceeds are converted separately on their relevant dates.
-
-## Important scope
-
-This is a record-keeping aid, not tax advice or a completed Self Assessment return. It does not calculate Income Tax/NIC, nor the final CGT liability, annual exempt amount or tax rate. Enter the employer-confirmed taxable vest value and deductions, and retain the original payslip, broker statements, grant documents and FX evidence.
-
-The disposal view approximates the UK identification order for ordinary listed shares: same-day acquisitions, acquisitions in the following 30 days, then the Section 104 pool. It requires the complete history of acquisitions for the particular share class to be reliable. Overseas duties, restricted/non-listed securities, share elections and corporate actions need specialist review.
-
-## References
-
-- [HMRC HS305 Employment-related shares and securities (2026)](https://www.gov.uk/government/publications/employee-shares-and-securities-further-guidance-hs305-self-assessment-helpsheet/hs305-employment-related-shares-and-securities-further-guidance-2026)
-- [HMRC Capital Gains manual: share identification](https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg51550)
-- [HMRC Capital Gains manual: foreign currency assets](https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg78310)
-- [HMRC average exchange rates](https://www.trade-tariff.service.gov.uk/exchange_rates/average)
-- [HMRC employee share scheme overview](https://www.gov.uk/tax-employee-share-schemes)
-- [RPP: Restricted Securities / RSUs](https://rppaccounts.co.uk/restricted-share-units/)
-- [Frazer James: RSUs guide](https://frazerjames.co.uk/rsus-a-tech-employees-guide-2/)
+- [HMRC HS305: employment-related securities](https://www.gov.uk/government/publications/employee-shares-and-securities-further-guidance-hs305-self-assessment-helpsheet/hs305-employment-related-shares-and-securities-further-guidance-2026)
+- [HMRC CGT foreign currency guidance](https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg78310)
+- [HMRC share identification guidance](https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg51550)

@@ -6,16 +6,19 @@ services:
       db:
         condition: service_healthy
     environment:
-      PORT: 3000
-      DATABASE_URL: postgres://rsu:${POSTGRES_PASSWORD}@db:5432/rsu
-      SESSION_SECRET: ${SESSION_SECRET}
-      APP_URL: ${APP_URL:-http://localhost:3000}
-      AUTH_MODE: ${AUTH_MODE:-local}
+      POSTGRES_HOST: db
+      POSTGRES_DB: rsu
+      POSTGRES_USER: rsu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      APP_URL: ${APP_URL:-http://localhost:8000}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-8000}:8000"
   db:
     image: postgres:17-alpine
     restart: unless-stopped
@@ -23,8 +26,7 @@ services:
       POSTGRES_DB: rsu
       POSTGRES_USER: rsu
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - rsu-postgres:/var/lib/postgresql/data
+    volumes: ["rsu-postgres:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rsu -d rsu"]
       interval: 5s

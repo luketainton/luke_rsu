@@ -1,0 +1,1 @@
+{% extends "base.html" %}{% block content %}<section class="card"><h1>Sign in</h1><form method="post">{% csrf_token %}{{ form.as_p }}<button>Sign in</button></form>{% if oidc_enabled %}<p><a href="/accounts/oidc/company/login/">Continue with company SSO</a></p>{% endif %}</section>{% endblock %}
