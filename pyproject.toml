@@ -16,7 +16,7 @@ dependencies = [
 dev = ["coverage>=7.6", "pylint>=3.3", "pylint-django>=2.6", "pytest>=8.3", "pytest-django>=4.9", "ruff>=0.12"]
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "config.settings"
+DJANGO_SETTINGS_MODULE = "config.settings_test"
 python_files = ["test_*.py", "tests.py"]
 
 [tool.ruff]
