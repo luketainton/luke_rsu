@@ -7,6 +7,8 @@ on:
 
 jobs:
   quality:
-    uses: git.tainton.uk/actions/gha-workflows/.gitea/workflows/ci-python-uv-with-docker.yml@main
+    uses: git.tainton.uk/actions/gha-workflows/.gitea/workflows/ci-python-unified.yml@main
     with:
       python-version: "3.14"
+      package-manager: uv
+      docker-enabled: true
