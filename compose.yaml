@@ -22,7 +22,7 @@ services:
     ports:
       - "${PORT:-8000}:8000"
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: rsu
