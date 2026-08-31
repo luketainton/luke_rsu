@@ -1,5 +1,6 @@
 import json
 from datetime import date
+from io import BytesIO
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -7,8 +8,9 @@ from django.contrib.auth.models import Group
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
+from openpyxl import Workbook
 
-from .models import FxRate, Grant, Vest
+from .models import FxRate, Grant, Sale, Vest
 from .scim import ScimBearerAuthMiddleware
 
 
@@ -92,6 +94,26 @@ class WorkspaceIsolationTests(TestCase):
         self.assertContains(response, grant.notes)
         self.assertContains(response, reverse("edit_grant", args=[grant.id]))
 
+    def test_hmrc_financial_year_uses_5_april_boundary(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        before_boundary = Grant.objects.create(
+            workspace=workspace,
+            date=date(2026, 4, 4),
+            units=1,
+        )
+        after_boundary = Grant.objects.create(
+            workspace=workspace,
+            date=date(2026, 4, 5),
+            units=1,
+        )
+        self.assertEqual(before_boundary.hmrc_financial_year, "2025/26")
+        self.assertEqual(after_boundary.hmrc_financial_year, "2026/27")
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("dashboard"))
+        self.assertContains(response, "UK tax year")
+        self.assertContains(response, "2025/26")
+        self.assertContains(response, "2026/27")
+
     def test_editor_can_edit_and_delete_their_grant(self):
         grant = Grant.objects.create(
             workspace=self.bob.workspace_memberships.get().workspace,
@@ -147,7 +169,7 @@ class WorkspaceIsolationTests(TestCase):
         )
         self.client.force_login(self.bob)
         response = self.client.get(reverse("dashboard"))
-        self.assertContains(response, "HMRC exchange rates")
+        self.assertContains(response, "Exchange rates")
         self.assertContains(response, rate.label)
         self.assertContains(response, reverse("edit_rate", args=[rate.id]))
 
@@ -196,6 +218,154 @@ class WorkspaceIsolationTests(TestCase):
         self.client.force_login(self.bob)
         self.assertEqual(self.client.get(reverse("edit_rate", args=[rate.id])).status_code, 403)
         self.assertEqual(self.client.post(reverse("delete_rate", args=[rate.id])).status_code, 403)
+
+    def test_editor_can_edit_and_delete_a_vest_and_sale(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        vest = Vest.objects.create(workspace=workspace, date=date(2026, 3, 1), units=20)
+        sale = Sale.objects.create(workspace=workspace, date=date(2026, 3, 2), units=10)
+        self.client.force_login(self.bob)
+        response = self.client.post(
+            reverse("edit_vest", args=[vest.id]),
+            {
+                "date": "2026-03-01",
+                "units": "25",
+                "withheld_units": "5",
+                "income_tax": "0",
+                "employee_nic": "0",
+            },
+        )
+        self.assertRedirects(response, reverse("dashboard"))
+        vest.refresh_from_db()
+        self.assertEqual(vest.units, 25)
+        response = self.client.post(
+            reverse("edit_sale", args=[sale.id]),
+            {"date": "2026-03-03", "units": "12", "fees_gbp": "1.25"},
+        )
+        self.assertRedirects(response, reverse("dashboard"))
+        sale.refresh_from_db()
+        self.assertEqual(sale.units, 12)
+        self.client.post(reverse("delete_vest", args=[vest.id]))
+        self.client.post(reverse("delete_sale", args=[sale.id]))
+        self.assertFalse(Vest.objects.filter(id=vest.id).exists())
+        self.assertFalse(Sale.objects.filter(id=sale.id).exists())
+
+    def test_viewer_cannot_edit_or_delete_vests_or_sales(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        vest = Vest.objects.create(workspace=workspace, date=date(2026, 3, 1), units=20)
+        sale = Sale.objects.create(workspace=workspace, date=date(2026, 3, 2), units=10)
+        member = self.bob.workspace_memberships.get()
+        member.role = "viewer"
+        member.save()
+        self.client.force_login(self.bob)
+        self.assertEqual(self.client.get(reverse("edit_vest", args=[vest.id])).status_code, 403)
+        self.assertEqual(self.client.post(reverse("delete_sale", args=[sale.id])).status_code, 403)
+
+
+def benefit_history_file():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Restricted Stock"
+    headers = [
+        "Record Type",
+        "Event Type",
+        "Grant Number",
+        "Date",
+        "Qty. or Amount",
+        "Grant Date",
+        "Granted Qty.",
+    ]
+    sheet.append(headers)
+    sheet.append(["Event", "Shares granted", "101", "01/10/2025", 100, None, None])
+    sheet.append(["Event", "Shares vested", "101", "01/10/2026", 25, None, None])
+    sheet.append(["Event", "Shares released", "101", "01/10/2026", 15, None, None])
+    sheet.append(["Event", "Shares sold", "101", "01/11/2026", 15, None, None])
+    stream = BytesIO()
+    workbook.save(stream)
+    stream.seek(0)
+    stream.name = "BenefitHistory.xlsx"
+    return stream
+
+
+class ImportAndRateFetchTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="importer", email="importer@example.test", password="safe-password"
+        )
+        self.workspace = self.user.workspace_memberships.get().workspace
+        self.client.force_login(self.user)
+
+    def test_etrade_import_is_idempotent_and_derives_withheld_units(self):
+        response = self.client.post(
+            reverse("import_etrade_history"), {"file": benefit_history_file()}
+        )
+        self.assertRedirects(response, reverse("dashboard"))
+        self.assertEqual(Grant.objects.filter(workspace=self.workspace).count(), 1)
+        vest = Vest.objects.get(workspace=self.workspace)
+        self.assertEqual(vest.withheld_units, 10)
+        sale = Sale.objects.get(workspace=self.workspace)
+        self.assertIsNone(sale.usd_price)
+        self.assertIn("add the USD sale price", sale.notes)
+        response = self.client.post(
+            reverse("import_etrade_history"), {"file": benefit_history_file()}
+        )
+        self.assertRedirects(response, reverse("dashboard"))
+        self.assertEqual(Grant.objects.filter(workspace=self.workspace).count(), 1)
+        self.assertEqual(Vest.objects.filter(workspace=self.workspace).count(), 1)
+        self.assertEqual(Sale.objects.filter(workspace=self.workspace).count(), 1)
+
+    def test_hmrc_fetch_saves_rate_from_official_csv(self):
+        csv_content = (
+            "Country/Territories,Currency,Currency Code,Currency Units per £1,Start date,End date\n"
+            "USA,Dollar,USD,1.3502,01/05/2026,31/05/2026\n"
+        ).encode()
+
+        class Response:
+            def read(self):
+                return csv_content
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        with patch("ledger.hmrc.urlopen", return_value=Response()):
+            response = self.client.post(
+                reverse("fetch_hmrc_rate"), {"method": "monthly", "rate_date": "2026-05-15"}
+            )
+        self.assertRedirects(response, reverse("dashboard"))
+        rate = FxRate.objects.get(workspace=self.workspace)
+        self.assertEqual(str(rate.usd_per_gbp), "1.35020000")
+        self.assertEqual(rate.starts_on, date(2026, 5, 1))
+        self.assertIn("type=monthly", rate.source_url)
+
+    def test_wise_fetch_saves_historical_rate_without_exposing_token(self):
+        payload = b'[{"rate": 1.2789, "source": "GBP", "target": "USD"}]'
+
+        class Response:
+            def read(self):
+                return payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        with (
+            patch.dict("os.environ", {"WISE_PERSONAL_API_TOKEN": "secret-token"}, clear=False),
+            patch("ledger.wise.urlopen", return_value=Response()) as urlopen,
+        ):
+            response = self.client.post(reverse("fetch_wise_rate"), {"rate_date": "2026-05-15"})
+        self.assertRedirects(response, reverse("dashboard"))
+        rate = FxRate.objects.get(workspace=self.workspace, method="wise")
+        self.assertEqual(str(rate.usd_per_gbp), "1.27890000")
+        self.assertEqual(rate.starts_on, date(2026, 5, 15))
+        self.assertIn("source=GBP", rate.source_url)
+        self.assertNotIn("secret-token", rate.source_url)
+        self.assertEqual(
+            urlopen.call_args.args[0].get_header("Authorization"), "Bearer secret-token"
+        )
 
 
 class ScimTokenTests(TestCase):

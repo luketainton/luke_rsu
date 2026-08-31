@@ -7,8 +7,21 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 
-from .forms import FxRateForm, GrantForm, MembershipForm, SaleForm, VestForm
+from .forms import (
+    BenefitHistoryImportForm,
+    FxRateForm,
+    GrantForm,
+    HmrcRateFetchForm,
+    MembershipForm,
+    SaleForm,
+    VestForm,
+    WiseRateFetchForm,
+)
+from .hmrc import HmrcRateUnavailable, fetch_usd_rate
+from .importers import UnsupportedImport, import_etrade_benefit_history
 from .models import FxRate, Grant, Sale, Vest, WorkspaceMembership
+from .wise import WiseRateUnavailable
+from .wise import fetch_usd_rate as fetch_wise_usd_rate
 
 
 def private_membership(user):
@@ -80,29 +93,37 @@ def add_grant(request):
 
 @login_required
 def edit_grant(request, grant_id):
-    member = private_membership(request.user)
-    if not can_edit(member):
-        return HttpResponseForbidden("Editor permission required")
-    grant = get_object_or_404(Grant, id=grant_id, workspace=member.workspace)
-    form = GrantForm(request.POST or None, instance=grant)
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "Grant updated.")
-        return redirect("dashboard")
-    return render(request, "ledger/form.html", {"form": form, "title": "Edit grant"})
+    return edit_record(request, Grant, GrantForm, grant_id, "Grant")
 
 
 @login_required
 def delete_grant(request, grant_id):
+    return delete_record(request, Grant, grant_id, "grant")
+
+
+def edit_record(request, model, form_class, record_id, title):
     member = private_membership(request.user)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
-    grant = get_object_or_404(Grant, id=grant_id, workspace=member.workspace)
-    if request.method == "POST":
-        grant.delete()
-        messages.success(request, "Grant deleted.")
+    record = get_object_or_404(model, id=record_id, workspace=member.workspace)
+    form = form_class(request.POST or None, instance=record)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, f"{title} updated.")
         return redirect("dashboard")
-    return render(request, "ledger/confirm_delete.html", {"grant": grant})
+    return render(request, "ledger/form.html", {"form": form, "title": f"Edit {title.lower()}"})
+
+
+def delete_record(request, model, record_id, title):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    record = get_object_or_404(model, id=record_id, workspace=member.workspace)
+    if request.method == "POST":
+        record.delete()
+        messages.success(request, f"{title.capitalize()} deleted.")
+        return redirect("dashboard")
+    return render(request, "ledger/confirm_delete_record.html", {"record": record, "title": title})
 
 
 @login_required
@@ -111,13 +132,112 @@ def add_vest(request):
 
 
 @login_required
+def edit_vest(request, vest_id):
+    return edit_record(request, Vest, VestForm, vest_id, "Vest")
+
+
+@login_required
+def delete_vest(request, vest_id):
+    return delete_record(request, Vest, vest_id, "vest")
+
+
+@login_required
 def add_sale(request):
     return add_record(request, SaleForm, "Sale")
 
 
 @login_required
+def edit_sale(request, sale_id):
+    return edit_record(request, Sale, SaleForm, sale_id, "Sale")
+
+
+@login_required
+def delete_sale(request, sale_id):
+    return delete_record(request, Sale, sale_id, "sale")
+
+
+@login_required
+def import_etrade_history(request):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    form = BenefitHistoryImportForm(request.POST or None, request.FILES or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            counts = import_etrade_benefit_history(form.cleaned_data["file"], member.workspace)
+        except UnsupportedImport as exc:
+            form.add_error("file", str(exc))
+        else:
+            messages.success(
+                request,
+                "Imported {grants} grants, {vests} vests and {sales} sales; "
+                "{duplicates} existing events skipped. {missing_sale_prices} sales need a USD price.".format(
+                    **counts
+                ),
+            )
+            return redirect("dashboard")
+    return render(request, "ledger/import.html", {"form": form})
+
+
+@login_required
 def add_rate(request):
     return add_record(request, FxRateForm, "Exchange rate")
+
+
+@login_required
+def fetch_hmrc_rate(request):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    form = HmrcRateFetchForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            rate = fetch_usd_rate(form.cleaned_data["method"], form.cleaned_data["rate_date"])
+        except HmrcRateUnavailable as exc:
+            form.add_error(None, str(exc))
+        else:
+            FxRate.objects.update_or_create(
+                workspace=member.workspace,
+                method=rate.method,
+                starts_on=rate.starts_on,
+                ends_on=rate.ends_on,
+                defaults={
+                    "label": rate.label,
+                    "usd_per_gbp": rate.usd_per_gbp,
+                    "source_url": rate.source_url,
+                },
+            )
+            messages.success(request, "HMRC USD rate retrieved and saved.")
+            return redirect("dashboard")
+    return render(request, "ledger/fetch_hmrc_rate.html", {"form": form})
+
+
+@login_required
+def fetch_wise_rate(request):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    form = WiseRateFetchForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            rate = fetch_wise_usd_rate(form.cleaned_data["rate_date"])
+        except WiseRateUnavailable as exc:
+            form.add_error(None, str(exc))
+        else:
+            FxRate.objects.update_or_create(
+                workspace=member.workspace,
+                method=rate.method,
+                starts_on=rate.starts_on,
+                ends_on=rate.ends_on,
+                defaults={
+                    "label": rate.label,
+                    "usd_per_gbp": rate.usd_per_gbp,
+                    "source_url": rate.source_url,
+                },
+            )
+            messages.success(request, "Wise GBP/USD rate retrieved and saved.")
+            return redirect("dashboard")
+    return render(request, "ledger/fetch_wise_rate.html", {"form": form})
 
 
 @login_required
@@ -129,7 +249,7 @@ def edit_rate(request, rate_id):
     form = FxRateForm(request.POST or None, instance=rate)
     if request.method == "POST" and form.is_valid():
         form.save()
-        messages.success(request, "HMRC rate updated.")
+        messages.success(request, "Exchange rate updated.")
         return redirect("dashboard")
     return render(request, "ledger/form.html", {"form": form, "title": "Edit HMRC rate"})
 

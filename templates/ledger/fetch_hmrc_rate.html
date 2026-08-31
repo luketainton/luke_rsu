@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>Retrieve HMRC USD rate</h1>
+  <p>Monthly rates use the selected calendar month. Spot and average rates use the applicable HMRC 31 March or 31 December publication period.</p>
+  <form method="post">{% csrf_token %}{{ form.as_p }}<button>Retrieve and save</button> <a href="{% url 'dashboard' %}">Cancel</a></form>
+</section>
+{% endblock %}

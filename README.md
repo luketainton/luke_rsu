@@ -28,6 +28,13 @@ https://your-rsu-host/accounts/oidc/company/login/callback/
 
 The client should be confidential and use the authorization-code flow. The generic OpenID Connect integration uses PKCE and fetches the provider's userinfo claims.
 
+## Optional Wise historical rates
+
+Set `WISE_PERSONAL_API_TOKEN` to enable **Retrieve Wise rate**. The token is sent only as a
+Bearer token to Wise and is never stored in the database or exposed in the browser. The app
+retrieves the GBP-to-USD historical rate at noon UTC on the selected event date and stores the
+timestamped source URL alongside the resulting rate.
+
 ## SCIM provisioning
 
 Set a long, independent `SCIM_BEARER_TOKEN` to enable the SCIM 2.0 endpoint at `/scim/v2/`. Provisioning clients must send `Authorization: Bearer <token>`; requests without the exact token receive `401`. Use a dedicated secret from your identity provider's provisioning configuration, not an end-user password or the Django secret key.
