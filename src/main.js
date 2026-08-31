@@ -2,14 +2,15 @@ import './style.css';
 
 const KEY = 'rsu-ledger-uk-v1';
 const example = { company: 'Acme Networks', ticker: 'ACME', grants: [{id:'g1', date:'2024-02-14', units:480, note:'FY24 new-hire grant'}], vests: [{id:'v1', grantId:'g1', date:'2025-02-14', units:120, usd:158.42, fx:0.7921, withheld:47, incomeTax:5301.34, nic:204.53, fees:0, source:'Payslip / broker confirmation'}], sales: [{id:'s1', date:'2025-04-21', units:35, usd:171.28, fx:0.7462, fees:8.95, note:'Diversification sale'}] };
-let state = JSON.parse(localStorage.getItem(KEY) || 'null') || structuredClone(example);
+let state = { company:'', ticker:'', grants:[], vests:[], sales:[], rates:[] };
+let workspaceId = null;
 state.rates ||= [];
 const money = n => new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP',maximumFractionDigits:2}).format(n || 0);
 const num = n => Number(n || 0);
 const fmt = d => d ? new Intl.DateTimeFormat('en-GB',{dateStyle:'medium'}).format(new Date(`${d}T00:00:00`)) : '—';
 const gbp = (usd,fx) => num(usd) * num(fx);
 const taxYear = date => { const d=new Date(`${date}T00:00:00`), y=d.getFullYear(); return d >= new Date(y,3,6) ? `${y}/${String(y+1).slice(2)}` : `${y-1}/${String(y).slice(2)}`; };
-const save = () => localStorage.setItem(KEY, JSON.stringify(state));
+const save = () => { localStorage.setItem(KEY, JSON.stringify(state)); if (workspaceId) fetch('/api/ledger', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({workspaceId,ledger:state}) }).catch(()=>console.warn('Could not save ledger to server')); };
 const byDate = a => [...a].sort((x,y)=>x.date.localeCompare(y.date));
 
 function vestValue(v){ return v.units * gbp(v.usd,v.fx); }
@@ -56,4 +57,9 @@ function render(){ const s=stats(), cgt=calculateCGT(); document.querySelector('
  document.querySelector('[data-action="reset"]').onclick=()=>{if(confirm('Reset all ledger data to the sample?')){state=structuredClone(example);save();render();}};
  document.querySelector('[data-action="export"]').onclick=()=>{const rows=[['type','date','tax_year','units','usd_price','gbp_per_usd','gbp_value_or_proceeds','fees_or_tax','fx_source','notes'],...state.grants.map(x=>['grant',x.date,taxYear(x.date),x.units,'','','','','',x.note]),...state.vests.map(x=>['vest',x.date,taxYear(x.date),x.units,x.usd,x.fx,vestValue(x),num(x.incomeTax)+num(x.nic)+num(x.fees),x.fxSource||'',x.source]),...state.sales.map(x=>['sale',x.date,taxYear(x.date),x.units,x.usd,x.fx,x.units*gbp(x.usd,x.fx)-num(x.fees),x.fees,x.fxSource||'',x.note])];const csv=rows.map(r=>r.map(x=>`"${String(x??'').replaceAll('"','""')}"`).join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='rsu-ledger-uk.csv';a.click();URL.revokeObjectURL(a.href);};
 }
-render();
+async function boot(){
+ try { const meResponse=await fetch('/api/me'); if(!meResponse.ok) return showLogin(); const me=await meResponse.json(); workspaceId=me.workspaces[0]?.id; const ledgerResponse=await fetch(`/api/ledger?workspaceId=${encodeURIComponent(workspaceId)}`); if(!ledgerResponse.ok) throw new Error('Could not load ledger'); const payload=await ledgerResponse.json(); state={...state,...payload.ledger}; state.rates ||= []; render(); }
+ catch(error) { document.querySelector('#app').innerHTML=`<main><section class="sources"><h2>Unable to load your ledger</h2><p>${error.message}. Check the database and authentication configuration, then try again.</p></section></main>`; }
+}
+function showLogin(){document.querySelector('#app').innerHTML=`<main><section class="hero"><div><p class="eyebrow">RSU LEDGER UK</p><h1>Your equity records, <em>kept private.</em></h1><p class="lead">Sign in to access your separate ledger workspace.</p></div></section><section class="workspace" style="margin-top:16px"><div class="ledger"><h2>Local sign in</h2><form id="loginForm" class="auth-form"><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" required></label><button class="primary">Sign in</button></form><p class="help">First deployment? Use the bootstrap form below to create the first administrator.</p><form id="bootstrapForm" class="auth-form"><label>Display name<input name="displayName" required></label><label>Administrator email<input name="email" type="email" required></label><label>Administrator password (14+ characters)<input name="password" type="password" minlength="14" required></label><button class="ghost">Create first administrator</button></form></div><aside><p class="eyebrow">OIDC</p><h2>Company sign in</h2><p class="help">When AUTH_MODE is oidc or hybrid, your identity provider sign-in is available here.</p><a class="primary auth-link" href="/auth/oidc">Continue with OIDC</a></aside></section></main>`; const submit=(id,url)=>document.querySelector(id).onsubmit=async e=>{e.preventDefault();const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});if(response.ok)return boot();alert((await response.json()).error||'Sign in failed');};submit('#loginForm','/auth/local/login');submit('#bootstrapForm','/auth/local/bootstrap');}
+boot();

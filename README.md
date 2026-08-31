@@ -2,14 +2,50 @@
 
 A small, local-first ledger for a UK taxpayer receiving USD-denominated RSUs. It records grants, vesting and sales, converts each event to GBP using the rate you enter, and provides a transparent share-matching CGT estimate.
 
-## Run locally
+## Deployment (Docker Compose)
+
+This release persists data in PostgreSQL and is intended to be run behind an HTTPS reverse proxy.
+
+```sh
+cp .env.example .env
+# edit secrets, APP_URL and (optionally) OIDC settings
+docker compose up -d --build
+```
+
+Visit `APP_URL`, then use **Create first administrator** once. The bootstrap endpoint closes as soon as the first user is created. Back up the named `rsu-postgres` Docker volume as part of your normal backup regime.
+
+`AUTH_MODE=local` provides password sign-in. `AUTH_MODE=oidc` requires an OIDC provider; `hybrid` enables both. Register the redirect URI as:
+
+```text
+https://your-rsu-host/auth/oidc/callback
+```
+
+The OIDC client must be confidential and use the Authorization Code flow. Set `APP_URL` to the external HTTPS URL so the callback and secure session cookie are correct.
+
+## Users, permissions and data isolation
+
+Each user receives their own private workspace and ledger when first created or authenticated. Ledger reads and writes require an explicit workspace-membership check in the API; a user cannot retrieve another workspace by guessing its ID.
+
+- **Owner** — can read/write the workspace and grant/revoke member access.
+- **Editor** — can read/write the workspace.
+- **Viewer** — can read only.
+- **System administrator** — can create local users through `POST /api/users`; this does not grant access to their private workspaces.
+
+Workspace membership routes are available at `/api/workspaces/:workspaceId/members` to workspace owners. A user must authenticate at least once before an owner can invite their email address. This deliberate constraint prevents an invite from silently creating an unverified account.
+
+The browser client saves changes through the authenticated API; it no longer treats browser local storage as the authoritative copy. The server stores a ledger document per workspace in PostgreSQL and session cookies are `HttpOnly`, `SameSite=Lax` and marked `Secure` in production.
+
+## Run locally without Docker
 
 ```sh
 npm install
+npm run db:migrate
 npm run dev
 ```
 
-All information lives in browser local storage. **Export CSV** regularly; no data leaves the browser.
+Set `DATABASE_URL`, `SESSION_SECRET` and `APP_URL` first (see `.env.example`). Start the deployable server with `npm run build && npm start`.
+
+**Export CSV** regularly. Your ledger is persisted to the configured PostgreSQL database; no third-party application receives the ledger data.
 
 ## Exchange rates
 

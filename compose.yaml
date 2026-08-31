@@ -1,0 +1,34 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://rsu:${POSTGRES_PASSWORD}@db:5432/rsu
+      SESSION_SECRET: ${SESSION_SECRET}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      AUTH_MODE: ${AUTH_MODE:-local}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+    ports:
+      - "${PORT:-3000}:3000"
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: rsu
+      POSTGRES_USER: rsu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - rsu-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rsu -d rsu"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  rsu-postgres:
