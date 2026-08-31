@@ -8,3 +8,13 @@ DATABASES = {
         "NAME": ":memory:",
     }
 }
+
+SCIM_ENABLED = True
+INSTALLED_APPS.append("django_scim")
+SCIM_SERVICE_PROVIDER = {
+    "NETLOC": "testserver",
+    "SCHEME": "http",
+    "AUTHENTICATION_SCHEMES": [{"type": "oauthbearertoken", "name": "Bearer token"}],
+    "AUTH_CHECK_MIDDLEWARE": "ledger.scim.ScimBearerAuthMiddleware",
+    "WWW_AUTHENTICATE_HEADER": "Bearer",
+}

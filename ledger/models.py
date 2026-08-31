@@ -3,12 +3,18 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django_scim.models import AbstractSCIMUserMixin
 
 
-class User(AbstractUser):
+class User(AbstractSCIMUserMixin, AbstractUser):
     email = models.EmailField(unique=True)
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
+
+    @property
+    def scim_groups(self):
+        """Expose Django groups through the SCIM 2.0 user resource."""
+        return self.groups.all()
 
 
 class Workspace(models.Model):

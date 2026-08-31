@@ -1,1 +1,34 @@
-{% extends "base.html" %}{% block content %}<h1>Your private RSU ledger</h1><p class="muted">{{ membership.workspace.name }} · {{ membership.get_role_display }} · Holding: {{ held }} shares</p><div class="actions">{% if membership.role != 'viewer' %}<a href="{% url 'add_grant' %}"><button>Add grant</button></a><a href="{% url 'add_vest' %}"><button>Add vest</button></a><a href="{% url 'add_sale' %}"><button>Add sale</button></a><a href="{% url 'add_rate' %}"><button>Add HMRC rate</button></a>{% endif %}{% if membership.role == 'owner' %}<a href="{% url 'access_management' %}">Manage access</a>{% endif %}</div><section class="card"><h2>Vests</h2><table><tr><th>Date</th><th>Units</th><th>USD price</th><th>GBP/USD</th><th>Income tax</th></tr>{% for v in vests %}<tr><td>{{v.date}}</td><td>{{v.units}}</td><td>{{v.usd_price}}</td><td>{{v.gbp_per_usd}}</td><td>£{{v.income_tax}}</td></tr>{% empty %}<tr><td colspan="5">No vests recorded.</td></tr>{% endfor %}</table></section><section class="card"><h2>Sales</h2><table><tr><th>Date</th><th>Units</th><th>USD price</th><th>GBP/USD</th><th>Fees</th></tr>{% for s in sales %}<tr><td>{{s.date}}</td><td>{{s.units}}</td><td>{{s.usd_price}}</td><td>{{s.gbp_per_usd}}</td><td>£{{s.fees_gbp}}</td></tr>{% empty %}<tr><td colspan="5">No sales recorded.</td></tr>{% endfor %}</table></section>{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+<h1>Your private RSU ledger</h1>
+<p class="muted">{{ membership.workspace.name }} · {{ membership.get_role_display }} · Holding: {{ held }} shares</p>
+<div class="actions">
+  {% if membership.role != 'viewer' %}
+    <a href="{% url 'add_grant' %}"><button>Add grant</button></a>
+    <a href="{% url 'add_vest' %}"><button>Add vest</button></a>
+    <a href="{% url 'add_sale' %}"><button>Add sale</button></a>
+    <a href="{% url 'add_rate' %}"><button>Add HMRC rate</button></a>
+  {% endif %}
+  {% if membership.role == 'owner' %}<a href="{% url 'access_management' %}">Manage access</a>{% endif %}
+</div>
+<section class="card">
+  <h2>Grants</h2>
+  <table><tr><th>Date</th><th>Units</th><th>USD price</th><th>GBP/USD</th><th>Notes</th>{% if membership.role != 'viewer' %}<th>Actions</th>{% endif %}</tr>
+  {% for grant in grants %}<tr><td>{{ grant.date }}</td><td>{{ grant.units }}</td><td>{{ grant.usd_price }}</td><td>{{ grant.gbp_per_usd }}</td><td>{{ grant.notes|default:"—" }}</td>{% if membership.role != 'viewer' %}<td><a href="{% url 'edit_grant' grant.id %}">Edit</a> · <a href="{% url 'delete_grant' grant.id %}">Delete</a></td>{% endif %}</tr>
+  {% empty %}<tr><td colspan="6">No grants recorded.</td></tr>{% endfor %}</table>
+</section>
+<section class="card">
+  <h2>Vests</h2>
+  <table><tr><th>Date</th><th>Units</th><th>USD price</th><th>GBP/USD</th><th>Income tax</th></tr>{% for v in vests %}<tr><td>{{v.date}}</td><td>{{v.units}}</td><td>{{v.usd_price}}</td><td>{{v.gbp_per_usd}}</td><td>£{{v.income_tax}}</td></tr>{% empty %}<tr><td colspan="5">No vests recorded.</td></tr>{% endfor %}</table>
+</section>
+<section class="card">
+  <h2>Sales</h2>
+  <table><tr><th>Date</th><th>Units</th><th>USD price</th><th>GBP/USD</th><th>Fees</th></tr>{% for s in sales %}<tr><td>{{s.date}}</td><td>{{s.units}}</td><td>{{s.usd_price}}</td><td>{{s.gbp_per_usd}}</td><td>£{{s.fees_gbp}}</td></tr>{% empty %}<tr><td colspan="5">No sales recorded.</td></tr>{% endfor %}</table>
+</section>
+<section class="card">
+  <h2>HMRC exchange rates</h2>
+  <table><tr><th>Label</th><th>Method</th><th>Period</th><th>USD per GBP</th><th>Source</th>{% if membership.role != 'viewer' %}<th>Actions</th>{% endif %}</tr>
+  {% for rate in rates %}<tr><td>{{ rate.label }}</td><td>{{ rate.get_method_display }}</td><td>{{ rate.starts_on }} – {{ rate.ends_on }}</td><td>{{ rate.usd_per_gbp }}</td><td><a href="{{ rate.source_url }}" rel="noopener">HMRC source</a></td>{% if membership.role != 'viewer' %}<td><a href="{% url 'edit_rate' rate.id %}">Edit</a> · <a href="{% url 'delete_rate' rate.id %}">Delete</a></td>{% endif %}</tr>
+  {% empty %}<tr><td colspan="6">No HMRC exchange rates recorded.</td></tr>{% endfor %}</table>
+</section>
+{% endblock %}

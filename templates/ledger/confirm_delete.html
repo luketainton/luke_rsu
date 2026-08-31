@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>Delete grant?</h1>
+  <p>This permanently removes the grant dated {{ grant.date }} for {{ grant.units }} units.</p>
+  <form method="post" class="inline-form">{% csrf_token %}<button class="danger" type="submit">Delete grant</button></form>
+  <a href="{% url 'dashboard' %}">Cancel</a>
+</section>
+{% endblock %}

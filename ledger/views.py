@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
 from django.http import HttpResponseForbidden
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import FxRateForm, GrantForm, MembershipForm, SaleForm, VestForm
 from .models import FxRate, Grant, Sale, Vest, WorkspaceMembership
@@ -79,6 +79,33 @@ def add_grant(request):
 
 
 @login_required
+def edit_grant(request, grant_id):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    grant = get_object_or_404(Grant, id=grant_id, workspace=member.workspace)
+    form = GrantForm(request.POST or None, instance=grant)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Grant updated.")
+        return redirect("dashboard")
+    return render(request, "ledger/form.html", {"form": form, "title": "Edit grant"})
+
+
+@login_required
+def delete_grant(request, grant_id):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    grant = get_object_or_404(Grant, id=grant_id, workspace=member.workspace)
+    if request.method == "POST":
+        grant.delete()
+        messages.success(request, "Grant deleted.")
+        return redirect("dashboard")
+    return render(request, "ledger/confirm_delete.html", {"grant": grant})
+
+
+@login_required
 def add_vest(request):
     return add_record(request, VestForm, "Vest")
 
@@ -91,6 +118,33 @@ def add_sale(request):
 @login_required
 def add_rate(request):
     return add_record(request, FxRateForm, "Exchange rate")
+
+
+@login_required
+def edit_rate(request, rate_id):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    rate = get_object_or_404(FxRate, id=rate_id, workspace=member.workspace)
+    form = FxRateForm(request.POST or None, instance=rate)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "HMRC rate updated.")
+        return redirect("dashboard")
+    return render(request, "ledger/form.html", {"form": form, "title": "Edit HMRC rate"})
+
+
+@login_required
+def delete_rate(request, rate_id):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    rate = get_object_or_404(FxRate, id=rate_id, workspace=member.workspace)
+    if request.method == "POST":
+        rate.delete()
+        messages.success(request, "HMRC rate deleted.")
+        return redirect("dashboard")
+    return render(request, "ledger/confirm_delete_rate.html", {"rate": rate})
 
 
 @login_required

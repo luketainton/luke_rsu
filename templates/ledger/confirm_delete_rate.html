@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>Delete HMRC rate?</h1>
+  <p>This permanently removes {{ rate.label }} ({{ rate.get_method_display }}).</p>
+  <form method="post" class="inline-form">{% csrf_token %}<button class="danger" type="submit">Delete HMRC rate</button></form>
+  <a href="{% url 'dashboard' %}">Cancel</a>
+</section>
+{% endblock %}

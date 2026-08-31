@@ -11,9 +11,13 @@ urlpatterns = [
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
     path("grants/add/", views.add_grant, name="add_grant"),
+    path("grants/<int:grant_id>/edit/", views.edit_grant, name="edit_grant"),
+    path("grants/<int:grant_id>/delete/", views.delete_grant, name="delete_grant"),
     path("vests/add/", views.add_vest, name="add_vest"),
     path("sales/add/", views.add_sale, name="add_sale"),
     path("rates/add/", views.add_rate, name="add_rate"),
+    path("rates/<int:rate_id>/edit/", views.edit_rate, name="edit_rate"),
+    path("rates/<int:rate_id>/delete/", views.delete_rate, name="delete_rate"),
     path("access/", views.access_management, name="access_management"),
 ]
 if settings.SCIM_ENABLED:

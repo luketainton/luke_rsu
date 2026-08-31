@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from unittest.mock import patch
 
@@ -6,7 +7,7 @@ from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
-from .models import Vest
+from .models import FxRate, Grant, Vest
 from .scim import ScimBearerAuthMiddleware
 
 
@@ -75,6 +76,126 @@ class WorkspaceIsolationTests(TestCase):
             "viewer",
         )
 
+    def test_dashboard_displays_workspace_grants(self):
+        grant = Grant.objects.create(
+            workspace=self.bob.workspace_memberships.get().workspace,
+            date=date(2026, 3, 1),
+            units=20,
+            usd_price=100,
+            gbp_per_usd=0.8,
+            notes="Annual award",
+        )
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("dashboard"))
+        self.assertContains(response, "Grants")
+        self.assertContains(response, grant.notes)
+        self.assertContains(response, reverse("edit_grant", args=[grant.id]))
+
+    def test_editor_can_edit_and_delete_their_grant(self):
+        grant = Grant.objects.create(
+            workspace=self.bob.workspace_memberships.get().workspace,
+            date=date(2026, 3, 1),
+            units=20,
+            usd_price=100,
+            gbp_per_usd=0.8,
+        )
+        self.client.force_login(self.bob)
+        response = self.client.post(
+            reverse("edit_grant", args=[grant.id]),
+            {
+                "date": "2026-03-02",
+                "units": "25",
+                "usd_price": "110",
+                "gbp_per_usd": "0.79",
+                "notes": "Corrected award",
+            },
+        )
+        self.assertRedirects(response, reverse("dashboard"))
+        grant.refresh_from_db()
+        self.assertEqual(grant.units, 25)
+        response = self.client.post(reverse("delete_grant", args=[grant.id]))
+        self.assertRedirects(response, reverse("dashboard"))
+        self.assertFalse(Grant.objects.filter(id=grant.id).exists())
+
+    def test_viewer_cannot_edit_or_delete_a_grant(self):
+        grant = Grant.objects.create(
+            workspace=self.bob.workspace_memberships.get().workspace,
+            date=date(2026, 3, 1),
+            units=20,
+            usd_price=100,
+            gbp_per_usd=0.8,
+        )
+        member = self.bob.workspace_memberships.get()
+        member.role = "viewer"
+        member.save()
+        self.client.force_login(self.bob)
+        self.assertEqual(self.client.get(reverse("edit_grant", args=[grant.id])).status_code, 403)
+        self.assertEqual(
+            self.client.post(reverse("delete_grant", args=[grant.id])).status_code, 403
+        )
+
+    def test_dashboard_displays_workspace_hmrc_rates(self):
+        rate = FxRate.objects.create(
+            workspace=self.bob.workspace_memberships.get().workspace,
+            label="March 2026 monthly rate",
+            method="monthly",
+            starts_on=date(2026, 3, 1),
+            ends_on=date(2026, 3, 31),
+            usd_per_gbp=1.27,
+            source_url="https://example.test/hmrc-rate",
+        )
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("dashboard"))
+        self.assertContains(response, "HMRC exchange rates")
+        self.assertContains(response, rate.label)
+        self.assertContains(response, reverse("edit_rate", args=[rate.id]))
+
+    def test_editor_can_edit_and_delete_an_hmrc_rate(self):
+        rate = FxRate.objects.create(
+            workspace=self.bob.workspace_memberships.get().workspace,
+            label="March 2026 monthly rate",
+            method="monthly",
+            starts_on=date(2026, 3, 1),
+            ends_on=date(2026, 3, 31),
+            usd_per_gbp=1.27,
+            source_url="https://example.test/hmrc-rate",
+        )
+        self.client.force_login(self.bob)
+        response = self.client.post(
+            reverse("edit_rate", args=[rate.id]),
+            {
+                "label": "March 2026 spot rate",
+                "method": "spot",
+                "starts_on": "2026-03-02",
+                "ends_on": "2026-03-02",
+                "usd_per_gbp": "1.25",
+                "source_url": "https://example.test/hmrc-spot-rate",
+            },
+        )
+        self.assertRedirects(response, reverse("dashboard"))
+        rate.refresh_from_db()
+        self.assertEqual(rate.method, "spot")
+        response = self.client.post(reverse("delete_rate", args=[rate.id]))
+        self.assertRedirects(response, reverse("dashboard"))
+        self.assertFalse(FxRate.objects.filter(id=rate.id).exists())
+
+    def test_viewer_cannot_edit_or_delete_an_hmrc_rate(self):
+        rate = FxRate.objects.create(
+            workspace=self.bob.workspace_memberships.get().workspace,
+            label="March 2026 monthly rate",
+            method="monthly",
+            starts_on=date(2026, 3, 1),
+            ends_on=date(2026, 3, 31),
+            usd_per_gbp=1.27,
+            source_url="https://example.test/hmrc-rate",
+        )
+        member = self.bob.workspace_memberships.get()
+        member.role = "viewer"
+        member.save()
+        self.client.force_login(self.bob)
+        self.assertEqual(self.client.get(reverse("edit_rate", args=[rate.id])).status_code, 403)
+        self.assertEqual(self.client.post(reverse("delete_rate", args=[rate.id])).status_code, 403)
+
 
 class ScimTokenTests(TestCase):
     def test_scim_middleware_rejects_missing_or_wrong_token(self):
@@ -93,3 +214,36 @@ class ScimTokenTests(TestCase):
                 ).status_code,
                 204,
             )
+
+    def test_users_endpoint_lists_users_with_a_valid_bearer_token(self):
+        user_model = get_user_model()
+        user_model.objects.create_user(
+            username="scim-user", email="scim-user@example.test", password="safe-password"
+        )
+        with patch.dict("os.environ", {"SCIM_BEARER_TOKEN": "expected"}, clear=False):
+            response = self.client.get(
+                "/scim/v2/Users?count=1000&startIndex=1",
+                HTTP_AUTHORIZATION="Bearer expected",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "scim-user@example.test")
+
+    def test_users_endpoint_creates_a_scim_user(self):
+        payload = {
+            "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+            "userName": "provisioned@example.test",
+            "name": {"givenName": "Provisioned", "familyName": "User"},
+            "emails": [{"value": "provisioned@example.test", "primary": True}],
+            "active": True,
+        }
+        with patch.dict("os.environ", {"SCIM_BEARER_TOKEN": "expected"}, clear=False):
+            response = self.client.post(
+                "/scim/v2/Users",
+                data=json.dumps(payload),
+                content_type="application/scim+json",
+                HTTP_AUTHORIZATION="Bearer expected",
+            )
+        self.assertEqual(response.status_code, 201)
+        user = get_user_model().objects.get(email="provisioned@example.test")
+        self.assertEqual(user.scim_username, "provisioned@example.test")
+        self.assertIsNotNone(user.scim_id)
