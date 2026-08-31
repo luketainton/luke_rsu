@@ -16,5 +16,6 @@ SCIM_SERVICE_PROVIDER = {
     "SCHEME": "http",
     "AUTHENTICATION_SCHEMES": [{"type": "oauthbearertoken", "name": "Bearer token"}],
     "AUTH_CHECK_MIDDLEWARE": "ledger.scim.ScimBearerAuthMiddleware",
+    "GROUP_ADAPTER": "ledger.scim.DjangoGroupAdapter",
     "WWW_AUTHENTICATE_HEADER": "Bearer",
 }

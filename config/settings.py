@@ -119,5 +119,6 @@ if SCIM_ENABLED:
             }
         ],
         "AUTH_CHECK_MIDDLEWARE": "ledger.scim.ScimBearerAuthMiddleware",
+        "GROUP_ADAPTER": "ledger.scim.DjangoGroupAdapter",
         "WWW_AUTHENTICATE_HEADER": "Bearer",
     }

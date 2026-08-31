@@ -3,6 +3,7 @@ from datetime import date
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
@@ -247,3 +248,13 @@ class ScimTokenTests(TestCase):
         user = get_user_model().objects.get(email="provisioned@example.test")
         self.assertEqual(user.scim_username, "provisioned@example.test")
         self.assertIsNotNone(user.scim_id)
+
+    def test_groups_endpoint_lists_django_groups(self):
+        group = Group.objects.create(name="Ledger editors")
+        with patch.dict("os.environ", {"SCIM_BEARER_TOKEN": "expected"}, clear=False):
+            response = self.client.get(
+                "/scim/v2/Groups?count=1000&startIndex=1",
+                HTTP_AUTHORIZATION="Bearer expected",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, group.name)

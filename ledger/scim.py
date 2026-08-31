@@ -2,6 +2,27 @@ import hmac
 import os
 
 from django.http import HttpResponse
+from django_scim.adapters import SCIMGroup
+
+
+class DjangoGroupAdapter(SCIMGroup):
+    """Adapt Django's built-in Group model to SCIM without schema changes."""
+
+    id_field = "id"
+
+    def to_dict(self):
+        data = {
+            "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
+            "id": self.id,
+            "externalId": "",
+            "displayName": self.display_name,
+            "members": self.members,
+            "meta": self.meta,
+        }
+        return data
+
+    def from_dict(self, data):
+        self.obj.name = data.get("displayName") or ""
 
 
 class ScimBearerAuthMiddleware:
