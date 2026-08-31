@@ -5,46 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RSU Ledger UK</title>
   <style>
-    :root { --background:#f7f9fc; --surface:#fff; --text:#101827; --muted:#5e6b80; --border:#dde3ed; --link:#304fc8; --message:#e6f5de; }
-    html[data-theme="charcoal"] { --background:#111315; --surface:#202428; --text:#f4f6f8; --muted:#b7c0c9; --border:#3c434a; --link:#9bb9ff; --message:#1e3a29; }
-    html[data-theme="navy"] { --background:#071526; --surface:#10253d; --text:#edf5ff; --muted:#adc3dc; --border:#284766; --link:#82c8ff; --message:#103e38; }
-    body { font-family:system-ui,sans-serif; background:var(--background); color:var(--text); max-width:1100px; margin:auto; padding:2rem; }
-    nav { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:2rem; }
-    a { color:var(--link); }
-    button { background:#304fc8; color:#fff; border:0; border-radius:6px; padding:.65rem 1rem; cursor:pointer; }
-    button.secondary { background:transparent; border:1px solid var(--border); color:var(--text); }
-    input,select,textarea { display:block; width:100%; box-sizing:border-box; padding:.55rem; margin:.25rem 0 1rem; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:4px; }
-    table { border-collapse:collapse; width:100%; background:var(--surface); margin:1rem 0; }
-    th,td { text-align:left; padding:.7rem; border-bottom:1px solid var(--border); }
-    .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1.25rem; margin:1rem 0; }
-    .actions,.theme-picker { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
-    .muted { color:var(--muted); }
-    .message { background:var(--message); padding:.7rem; border-radius:6px; }
-    .danger { background:#b42318; }
-    .inline-form { display:inline; }
-    @media (max-width:700px) { body { padding:1rem; } nav { align-items:flex-start; flex-direction:column; } }
+    :root { --background:#f7f9fc; --surface:#fff; --text:#101827; --muted:#5e6b80; --border:#dde3ed; --link:#304fc8; --message:#e6f5de; --sidebar:#fff; --active:#e7ecff; }
+    html[data-theme="charcoal"] { --background:#111315; --surface:#202428; --text:#f4f6f8; --muted:#b7c0c9; --border:#3c434a; --link:#9bb9ff; --message:#1e3a29; --sidebar:#181b1e; --active:#303b4b; }
+    html[data-theme="navy"] { --background:#071526; --surface:#10253d; --text:#edf5ff; --muted:#adc3dc; --border:#284766; --link:#82c8ff; --message:#103e38; --sidebar:#0b1c30; --active:#193957; }
+    * { box-sizing:border-box; } body { font-family:system-ui,sans-serif; background:var(--background); color:var(--text); margin:0; } a { color:var(--link); }
+    button { background:#304fc8; color:#fff; border:0; border-radius:6px; padding:.65rem 1rem; cursor:pointer; font:inherit; } button.secondary { background:transparent; border:1px solid var(--border); color:var(--text); }
+    input,select,textarea { display:block; width:100%; padding:.55rem; margin:.25rem 0 1rem; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:4px; font:inherit; }
+    table { border-collapse:collapse; width:100%; background:var(--surface); margin:1rem 0; } th,td { text-align:left; padding:.7rem; border-bottom:1px solid var(--border); white-space:nowrap; }
+    .app-shell { min-height:100vh; display:grid; grid-template-columns:15rem minmax(0, 1fr); } .sidebar { background:var(--sidebar); border-right:1px solid var(--border); padding:1.25rem; position:sticky; top:0; height:100vh; display:flex; flex-direction:column; gap:1.25rem; }
+    .brand { color:var(--text); font-size:1.15rem; text-decoration:none; } .sidebar-nav { display:grid; gap:.25rem; } .sidebar-nav a { color:var(--text); padding:.6rem .7rem; border-radius:6px; text-decoration:none; } .sidebar-nav a:hover,.sidebar-nav a.active { background:var(--active); }
+    .sidebar-footer { margin-top:auto; display:grid; gap:.75rem; } .account { color:var(--muted); font-size:.85rem; overflow-wrap:anywhere; } main { max-width:1400px; width:100%; margin:0 auto; padding:2rem; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1.25rem; margin:1rem 0; } .summary-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:1rem; } .summary-value { font-size:1.7rem; font-weight:700; margin:.25rem 0 0; }
+    .actions,.theme-picker { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; } .muted { color:var(--muted); } .message { background:var(--message); padding:.7rem; border-radius:6px; } .danger { background:#b42318; } .inline-form { display:inline; } .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    @media (max-width:780px) { .app-shell { display:block; } .sidebar { position:static; height:auto; padding:1rem; gap:.75rem; border-right:0; border-bottom:1px solid var(--border); } .sidebar-nav { display:flex; overflow-x:auto; gap:.25rem; padding-bottom:.25rem; } .sidebar-nav a { flex:0 0 auto; } .sidebar-footer { margin-top:0; display:flex; align-items:center; gap:1rem; } .account { display:none; } main { padding:1rem; } .summary-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:.75rem; } .card { padding:1rem; } }
   </style>
 </head>
 <body>
-  <nav>
-    <strong>RSU Ledger <small>UK</small></strong>
-    <div class="theme-picker" aria-label="Colour theme">
-      <span class="muted">Theme:</span>
-      <button class="secondary" type="button" data-theme-choice="charcoal">Dark grey</button>
-      <button class="secondary" type="button" data-theme-choice="navy">Navy blue</button>
-    </div>
-    {% if user.is_authenticated %}<span>{{ user.email }} · <a href="{% url 'logout' %}">Sign out</a></span>{% endif %}
-  </nav>
-  {% for message in messages %}<p class="message">{{ message }}</p>{% endfor %}
-  {% block content %}{% endblock %}
-  <script>
-    const savedTheme = localStorage.getItem("rsu-theme");
-    if (["charcoal", "navy"].includes(savedTheme)) document.documentElement.dataset.theme = savedTheme;
-    document.querySelectorAll("[data-theme-choice]").forEach((button) => button.addEventListener("click", () => {
-      const theme = button.dataset.themeChoice;
-      document.documentElement.dataset.theme = theme;
-      localStorage.setItem("rsu-theme", theme);
-    }));
-  </script>
+  <div class="app-shell">
+    {% if user.is_authenticated %}
+    <aside class="sidebar">
+      <a class="brand" href="{% url 'dashboard' %}">RSU Ledger <small>UK</small></a>
+      <nav class="sidebar-nav" aria-label="Primary navigation">
+        <a class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">Overview</a>
+        <a class="{% if request.resolver_match.url_name == 'grant_list' %}active{% endif %}" href="{% url 'grant_list' %}">Grants</a>
+        <a class="{% if request.resolver_match.url_name == 'vest_list' %}active{% endif %}" href="{% url 'vest_list' %}">Vests</a>
+        <a class="{% if request.resolver_match.url_name == 'sale_list' %}active{% endif %}" href="{% url 'sale_list' %}">Sales</a>
+        <a class="{% if request.resolver_match.url_name == 'rate_list' %}active{% endif %}" href="{% url 'rate_list' %}">Exchange rates</a>
+        {% if membership.role != 'viewer' %}<a class="{% if request.resolver_match.url_name == 'broker_management' %}active{% endif %}" href="{% url 'broker_management' %}">Brokers</a>{% endif %}
+        {% if membership.role != 'viewer' %}<a class="{% if request.resolver_match.url_name == 'import_etrade_history' %}active{% endif %}" href="{% url 'import_etrade_history' %}">Import history</a>{% endif %}
+        {% if membership.role == 'owner' %}<a class="{% if request.resolver_match.url_name == 'access_management' %}active{% endif %}" href="{% url 'access_management' %}">Access</a>{% endif %}
+      </nav>
+      <div class="sidebar-footer"><div class="theme-picker" aria-label="Colour theme"><button class="secondary" type="button" data-theme-choice="charcoal">Dark grey</button><button class="secondary" type="button" data-theme-choice="navy">Navy blue</button></div><div class="account">{{ user.email }} · <a href="{% url 'logout' %}">Sign out</a></div></div>
+    </aside>
+    {% endif %}
+    <main>{% for message in messages %}<p class="message">{{ message }}</p>{% endfor %}{% block content %}{% endblock %}</main>
+  </div>
+  <script>const savedTheme = localStorage.getItem("rsu-theme"); if (["charcoal", "navy"].includes(savedTheme)) document.documentElement.dataset.theme = savedTheme; document.querySelectorAll("[data-theme-choice]").forEach((button) => button.addEventListener("click", () => { const theme = button.dataset.themeChoice; document.documentElement.dataset.theme = theme; localStorage.setItem("rsu-theme", theme); }));</script>
 </body>
 </html>

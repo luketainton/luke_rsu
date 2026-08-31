@@ -14,7 +14,9 @@ from decimal import Decimal, InvalidOperation
 
 from openpyxl import load_workbook
 
-from .models import Grant, Sale, Vest
+from .models import Broker, Grant, Sale, Vest
+
+ETRADE_BROKER_NAME = "Morgan Stanley E*TRADE"
 
 
 class UnsupportedImport(ValueError):
@@ -80,6 +82,9 @@ def _event_rows(upload):
 def import_etrade_benefit_history(upload, workspace):
     """Insert recognisable E*TRADE events, skipping events already imported."""
     rows = _event_rows(upload)
+    broker = Broker.objects.filter(workspace=workspace, name__iexact=ETRADE_BROKER_NAME).first()
+    if broker is None:
+        broker = Broker.objects.create(workspace=workspace, name=ETRADE_BROKER_NAME)
     released = {}
     for row in rows:
         if _value(row, "Event Type") == "Shares released":
@@ -121,6 +126,8 @@ def import_etrade_benefit_history(upload, workspace):
             defaults={
                 "date": event_date,
                 "units": units,
+                "grant_id": str(grant_number or ""),
+                "broker": broker,
                 "notes": f"E*TRADE grant {grant_number}",
                 **defaults,
             },
@@ -140,7 +147,13 @@ def import_etrade_benefit_history(upload, workspace):
         _, created = Grant.objects.get_or_create(
             workspace=workspace,
             source_key=key,
-            defaults={"date": event_date, "units": units, "notes": f"E*TRADE grant {grant_number}"},
+            defaults={
+                "date": event_date,
+                "units": units,
+                "grant_id": str(grant_number or ""),
+                "broker": broker,
+                "notes": f"E*TRADE grant {grant_number}",
+            },
         )
         counts["grants" if created else "duplicates"] += 1
     counts["missing_sale_prices"] = missing_sale_prices

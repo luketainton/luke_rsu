@@ -2,6 +2,7 @@ from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.db.models import Q
+from django.db.models.functions import Lower
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django_scim.models import AbstractSCIMUserMixin
@@ -41,8 +42,26 @@ class WorkspaceMembership(models.Model):
         ]
 
 
+class Broker(models.Model):
+    """A broker available to one workspace's records."""
+
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="brokers")
+    name = models.CharField(max_length=120)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(Lower("name"), "workspace", name="unique_workspace_broker")
+        ]
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class WorkspaceRecord(models.Model):
     workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE)
+    grant_id = models.CharField(max_length=120, blank=True)
+    broker = models.ForeignKey(Broker, on_delete=models.SET_NULL, null=True, blank=True)
     date = models.DateField()
     units = models.DecimalField(max_digits=16, decimal_places=4)
     usd_price = models.DecimalField(max_digits=16, decimal_places=6, null=True, blank=True)

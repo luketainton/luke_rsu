@@ -1,11 +1,16 @@
 from django import forms
 
-from .models import FxRate, Grant, Sale, Vest, WorkspaceMembership
+from .models import Broker, FxRate, Grant, Sale, Vest, WorkspaceMembership
 
 
 class RecordBaseForm(forms.ModelForm):
+    def __init__(self, *args, workspace, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["broker"].queryset = Broker.objects.filter(workspace=workspace)
+        self.fields["broker"].empty_label = "No broker selected"
+
     class Meta:
-        fields = ["date", "units", "usd_price", "gbp_per_usd", "notes"]
+        fields = ["grant_id", "broker", "date", "units", "usd_price", "gbp_per_usd", "notes"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 2}),
@@ -27,6 +32,25 @@ class SaleForm(RecordBaseForm):
     class Meta(RecordBaseForm.Meta):
         model = Sale
         fields = RecordBaseForm.Meta.fields + ["fees_gbp"]
+
+
+class BrokerForm(forms.ModelForm):
+    def __init__(self, *args, workspace, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.workspace = workspace
+
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+        matches = Broker.objects.filter(workspace=self.workspace, name__iexact=name)
+        if self.instance.pk:
+            matches = matches.exclude(pk=self.instance.pk)
+        if matches.exists():
+            raise forms.ValidationError("A broker with this name already exists.")
+        return name
+
+    class Meta:
+        model = Broker
+        fields = ["name"]
 
 
 class FxRateForm(forms.ModelForm):

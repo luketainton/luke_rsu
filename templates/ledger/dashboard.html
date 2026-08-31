@@ -1,37 +1,23 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Your private RSU ledger</h1>
-<p class="muted">{{ membership.workspace.name }} · {{ membership.get_role_display }} · Holding: {{ held }} shares</p>
-<div class="actions">
-  {% if membership.role != 'viewer' %}
-    <a href="{% url 'add_grant' %}"><button>Add grant</button></a>
-    <a href="{% url 'add_vest' %}"><button>Add vest</button></a>
-    <a href="{% url 'add_sale' %}"><button>Add sale</button></a>
-    <a href="{% url 'import_etrade_history' %}"><button>Import E*TRADE history</button></a>
-    <a href="{% url 'add_rate' %}"><button>Add HMRC rate</button></a>
-    <a href="{% url 'fetch_hmrc_rate' %}"><button>Retrieve HMRC rate</button></a>
-    <a href="{% url 'fetch_wise_rate' %}"><button>Retrieve Wise rate</button></a>
-  {% endif %}
-  {% if membership.role == 'owner' %}<a href="{% url 'access_management' %}">Manage access</a>{% endif %}
-</div>
-<section class="card">
-  <h2>Grants</h2>
-  <table><tr><th>Date</th><th>UK tax year</th><th>Units</th><th>USD price</th><th>GBP/USD</th><th>Notes</th>{% if membership.role != 'viewer' %}<th>Actions</th>{% endif %}</tr>
-  {% for grant in grants %}<tr><td>{{ grant.date }}</td><td>{{ grant.hmrc_financial_year }}</td><td>{{ grant.units }}</td><td>{{ grant.usd_price }}</td><td>{{ grant.gbp_per_usd }}</td><td>{{ grant.notes|default:"—" }}</td>{% if membership.role != 'viewer' %}<td><a href="{% url 'edit_grant' grant.id %}">Edit</a> · <a href="{% url 'delete_grant' grant.id %}">Delete</a></td>{% endif %}</tr>
-  {% empty %}<tr><td colspan="7">No grants recorded.</td></tr>{% endfor %}</table>
+<p class="muted">{{ membership.workspace.name }} · {{ membership.get_role_display }}</p>
+<section class="summary-grid">
+  <div class="card"><span class="muted">Current holding</span><p class="summary-value">{{ held }}</p><span class="muted">shares</span></div>
+  <div class="card"><span class="muted">Grants</span><p class="summary-value">{{ grant_count }}</p><a href="{% url 'grant_list' %}">View grants</a></div>
+  <div class="card"><span class="muted">Vests</span><p class="summary-value">{{ vest_count }}</p><a href="{% url 'vest_list' %}">View vests</a></div>
+  <div class="card"><span class="muted">Sales</span><p class="summary-value">{{ sale_count }}</p><a href="{% url 'sale_list' %}">View sales</a></div>
 </section>
 <section class="card">
-  <h2>Vests</h2>
-  <table><tr><th>Date</th><th>UK tax year</th><th>Units</th><th>USD price</th><th>GBP/USD</th><th>Income tax</th>{% if membership.role != 'viewer' %}<th>Actions</th>{% endif %}</tr>{% for v in vests %}<tr><td>{{v.date}}</td><td>{{v.hmrc_financial_year}}</td><td>{{v.units}}</td><td>{{v.usd_price}}</td><td>{{v.gbp_per_usd}}</td><td>£{{v.income_tax}}</td>{% if membership.role != 'viewer' %}<td><a href="{% url 'edit_vest' v.id %}">Edit</a> · <a href="{% url 'delete_vest' v.id %}">Delete</a></td>{% endif %}</tr>{% empty %}<tr><td colspan="7">No vests recorded.</td></tr>{% endfor %}</table>
-</section>
-<section class="card">
-  <h2>Sales</h2>
-  <table><tr><th>Date</th><th>UK tax year</th><th>Units</th><th>USD price</th><th>GBP/USD</th><th>Fees</th>{% if membership.role != 'viewer' %}<th>Actions</th>{% endif %}</tr>{% for s in sales %}<tr><td>{{s.date}}</td><td>{{s.hmrc_financial_year}}</td><td>{{s.units}}</td><td>{{s.usd_price}}</td><td>{{s.gbp_per_usd}}</td><td>£{{s.fees_gbp}}</td>{% if membership.role != 'viewer' %}<td><a href="{% url 'edit_sale' s.id %}">Edit</a> · <a href="{% url 'delete_sale' s.id %}">Delete</a></td>{% endif %}</tr>{% empty %}<tr><td colspan="7">No sales recorded.</td></tr>{% endfor %}</table>
-</section>
-<section class="card">
-  <h2>Exchange rates</h2>
-  <table><tr><th>Label</th><th>Method</th><th>Period</th><th>USD per GBP</th><th>Source</th>{% if membership.role != 'viewer' %}<th>Actions</th>{% endif %}</tr>
-  {% for rate in rates %}<tr><td>{{ rate.label }}</td><td>{{ rate.get_method_display }}</td><td>{{ rate.starts_on }} – {{ rate.ends_on }}</td><td>{{ rate.usd_per_gbp }}</td><td><a href="{{ rate.source_url }}" rel="noopener">Rate source</a></td>{% if membership.role != 'viewer' %}<td><a href="{% url 'edit_rate' rate.id %}">Edit</a> · <a href="{% url 'delete_rate' rate.id %}">Delete</a></td>{% endif %}</tr>
-  {% empty %}<tr><td colspan="6">No exchange rates recorded.</td></tr>{% endfor %}</table>
+  <h2>Quick actions</h2>
+  <div class="actions">
+    {% if membership.role != 'viewer' %}
+      <a href="{% url 'add_grant' %}"><button>Add grant</button></a>
+      <a href="{% url 'add_vest' %}"><button>Add vest</button></a>
+      <a href="{% url 'add_sale' %}"><button>Add sale</button></a>
+      <a href="{% url 'import_etrade_history' %}"><button class="secondary">Import E*TRADE history</button></a>
+    {% endif %}
+    <a href="{% url 'rate_list' %}">Manage {{ rate_count }} exchange rate{{ rate_count|pluralize }}</a>
+  </div>
 </section>
 {% endblock %}

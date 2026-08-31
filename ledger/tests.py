@@ -6,12 +6,23 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.http import HttpResponse
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from openpyxl import Workbook
 
-from .models import FxRate, Grant, Sale, Vest
+from .models import Broker, FxRate, Grant, Sale, Vest
 from .scim import ScimBearerAuthMiddleware
+
+
+class SsoLoginTests(TestCase):
+    @override_settings(SOCIALACCOUNT_LOGIN_ON_GET=True)
+    def test_sso_link_does_not_render_allauth_confirmation_page(self):
+        from allauth.socialaccount.providers.base.utils import respond_to_login_on_get
+
+        response = respond_to_login_on_get(
+            RequestFactory().get("/accounts/oidc/company/login/"), None
+        )
+        self.assertIsNone(response)
 
 
 class WorkspaceIsolationTests(TestCase):
@@ -68,6 +79,56 @@ class WorkspaceIsolationTests(TestCase):
         vest = Vest.objects.get(date=date(2026, 2, 1))
         self.assertEqual(vest.workspace, self.bob.workspace_memberships.get().workspace)
 
+    def test_brokers_are_workspace_scoped_and_can_be_managed(self):
+        own_broker = Broker.objects.create(
+            workspace=self.bob.workspace_memberships.get().workspace, name="Schwab"
+        )
+        other_broker = Broker.objects.create(workspace=self.alice_workspace, name="E*TRADE")
+        self.client.force_login(self.bob)
+
+        response = self.client.post(reverse("add_broker"), {"name": "Fidelity"})
+        self.assertRedirects(response, reverse("broker_management"))
+        fidelity = Broker.objects.get(name="Fidelity")
+        self.assertEqual(fidelity.workspace, self.bob.workspace_memberships.get().workspace)
+        self.assertNotContains(self.client.get(reverse("broker_management")), other_broker.name)
+        response = self.client.post(reverse("add_broker"), {"name": "schwab"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "A broker with this name already exists.")
+
+        response = self.client.post(
+            reverse("add_grant"),
+            {
+                "grant_id": "RSU-2026",
+                "broker": own_broker.id,
+                "date": "2026-02-01",
+                "units": "12",
+            },
+        )
+        self.assertRedirects(response, reverse("dashboard"))
+        grant = Grant.objects.get(grant_id="RSU-2026")
+        self.assertEqual(grant.broker, own_broker)
+        self.assertContains(self.client.get(reverse("grant_list")), "RSU-2026")
+        self.assertContains(self.client.get(reverse("grant_list")), "Schwab")
+
+        self.client.post(
+            reverse("edit_broker", args=[fidelity.id]), {"name": "Fidelity NetBenefits"}
+        )
+        fidelity.refresh_from_db()
+        self.assertEqual(fidelity.name, "Fidelity NetBenefits")
+        Sale.objects.create(
+            workspace=grant.workspace, date=date(2026, 2, 2), units=1, broker=fidelity
+        )
+        self.client.post(reverse("delete_broker", args=[fidelity.id]))
+        self.assertFalse(Broker.objects.filter(id=fidelity.id).exists())
+        self.assertIsNone(Sale.objects.get(workspace=grant.workspace).broker)
+
+        response = self.client.post(
+            reverse("add_sale"),
+            {"date": "2026-02-03", "units": "1", "broker": other_broker.id},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select a valid choice")
+
     def test_owner_can_invite_existing_user_as_viewer(self):
         self.client.force_login(self.alice)
         response = self.client.post(
@@ -79,7 +140,7 @@ class WorkspaceIsolationTests(TestCase):
             "viewer",
         )
 
-    def test_dashboard_displays_workspace_grants(self):
+    def test_grant_list_displays_workspace_grants_and_navigation(self):
         grant = Grant.objects.create(
             workspace=self.bob.workspace_memberships.get().workspace,
             date=date(2026, 3, 1),
@@ -89,10 +150,26 @@ class WorkspaceIsolationTests(TestCase):
             notes="Annual award",
         )
         self.client.force_login(self.bob)
-        response = self.client.get(reverse("dashboard"))
+        response = self.client.get(reverse("grant_list"))
         self.assertContains(response, "Grants")
         self.assertContains(response, grant.notes)
         self.assertContains(response, reverse("edit_grant", args=[grant.id]))
+        self.assertContains(response, reverse("vest_list"))
+
+    def test_dashboard_shows_compact_summary_and_record_pages_are_isolated(self):
+        own_grant = Grant.objects.create(
+            workspace=self.bob.workspace_memberships.get().workspace,
+            date=date(2026, 3, 1),
+            units=20,
+            notes="Bob grant",
+        )
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("dashboard"))
+        self.assertContains(response, "Current holding")
+        self.assertNotContains(response, own_grant.notes)
+        response = self.client.get(reverse("grant_list"))
+        self.assertContains(response, own_grant.notes)
+        self.assertNotContains(response, "2026-01-01")
 
     def test_hmrc_financial_year_uses_5_april_boundary(self):
         workspace = self.bob.workspace_memberships.get().workspace
@@ -109,7 +186,7 @@ class WorkspaceIsolationTests(TestCase):
         self.assertEqual(before_boundary.hmrc_financial_year, "2025/26")
         self.assertEqual(after_boundary.hmrc_financial_year, "2026/27")
         self.client.force_login(self.bob)
-        response = self.client.get(reverse("dashboard"))
+        response = self.client.get(reverse("grant_list"))
         self.assertContains(response, "UK tax year")
         self.assertContains(response, "2025/26")
         self.assertContains(response, "2026/27")
@@ -157,7 +234,7 @@ class WorkspaceIsolationTests(TestCase):
             self.client.post(reverse("delete_grant", args=[grant.id])).status_code, 403
         )
 
-    def test_dashboard_displays_workspace_hmrc_rates(self):
+    def test_rate_list_displays_workspace_hmrc_rates(self):
         rate = FxRate.objects.create(
             workspace=self.bob.workspace_memberships.get().workspace,
             label="March 2026 monthly rate",
@@ -168,7 +245,7 @@ class WorkspaceIsolationTests(TestCase):
             source_url="https://example.test/hmrc-rate",
         )
         self.client.force_login(self.bob)
-        response = self.client.get(reverse("dashboard"))
+        response = self.client.get(reverse("rate_list"))
         self.assertContains(response, "Exchange rates")
         self.assertContains(response, rate.label)
         self.assertContains(response, reverse("edit_rate", args=[rate.id]))
@@ -300,9 +377,16 @@ class ImportAndRateFetchTests(TestCase):
         )
         self.assertRedirects(response, reverse("dashboard"))
         self.assertEqual(Grant.objects.filter(workspace=self.workspace).count(), 1)
+        grant = Grant.objects.get(workspace=self.workspace)
+        self.assertEqual(grant.grant_id, "101")
+        self.assertEqual(grant.broker.name, "Morgan Stanley E*TRADE")
         vest = Vest.objects.get(workspace=self.workspace)
         self.assertEqual(vest.withheld_units, 10)
+        self.assertEqual(vest.grant_id, "101")
+        self.assertEqual(vest.broker.name, "Morgan Stanley E*TRADE")
         sale = Sale.objects.get(workspace=self.workspace)
+        self.assertEqual(sale.grant_id, "101")
+        self.assertEqual(sale.broker.name, "Morgan Stanley E*TRADE")
         self.assertIsNone(sale.usd_price)
         self.assertIn("add the USD sale price", sale.notes)
         response = self.client.post(

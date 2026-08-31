@@ -45,6 +45,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "ledger.context_processors.workspace_membership",
             ]
         },
     }
@@ -83,6 +84,9 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_LOGIN_METHODS = {"email", "username"}
 ACCOUNT_SIGNUP_ENABLED = False
+# Start the configured OIDC flow from the SSO link instead of rendering allauth's
+# intermediate "Continue" confirmation page.
+SOCIALACCOUNT_LOGIN_ON_GET = True
 
 if os.environ.get("OIDC_ISSUER_URL"):
     SOCIALACCOUNT_PROVIDERS = {

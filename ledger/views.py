@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import (
     BenefitHistoryImportForm,
+    BrokerForm,
     FxRateForm,
     GrantForm,
     HmrcRateFetchForm,
@@ -19,7 +20,7 @@ from .forms import (
 )
 from .hmrc import HmrcRateUnavailable, fetch_usd_rate
 from .importers import UnsupportedImport, import_etrade_benefit_history
-from .models import FxRate, Grant, Sale, Vest, WorkspaceMembership
+from .models import Broker, FxRate, Grant, Sale, Vest, WorkspaceMembership
 from .wise import WiseRateUnavailable
 from .wise import fetch_usd_rate as fetch_wise_usd_rate
 
@@ -59,24 +60,62 @@ def logout_view(request):
 def dashboard(request):
     member = private_membership(request.user)
     workspace = member.workspace
+    vests = Vest.objects.filter(workspace=workspace)
+    sales = Sale.objects.filter(workspace=workspace)
     context = {
         "membership": member,
-        "grants": Grant.objects.filter(workspace=workspace).order_by("-date"),
-        "vests": Vest.objects.filter(workspace=workspace).order_by("-date"),
-        "sales": Sale.objects.filter(workspace=workspace).order_by("-date"),
-        "rates": FxRate.objects.filter(workspace=workspace).order_by("-ends_on"),
+        "grant_count": Grant.objects.filter(workspace=workspace).count(),
+        "vest_count": vests.count(),
+        "sale_count": sales.count(),
+        "rate_count": FxRate.objects.filter(workspace=workspace).count(),
     }
-    context["held"] = sum((v.units - v.withheld_units for v in context["vests"]), Decimal()) - sum(
-        (s.units for s in context["sales"]), Decimal()
+    context["held"] = sum((v.units - v.withheld_units for v in vests), Decimal()) - sum(
+        (s.units for s in sales), Decimal()
     )
     return render(request, "ledger/dashboard.html", context)
+
+
+def list_records(request, model, template, context_name, order_by):
+    member = private_membership(request.user)
+    records = (
+        model.objects.filter(workspace=member.workspace).select_related("broker").order_by(order_by)
+    )
+    return render(request, template, {"membership": member, context_name: records})
+
+
+@login_required
+def grant_list(request):
+    return list_records(request, Grant, "ledger/grants.html", "grants", "-date")
+
+
+@login_required
+def vest_list(request):
+    return list_records(request, Vest, "ledger/vests.html", "vests", "-date")
+
+
+@login_required
+def sale_list(request):
+    return list_records(request, Sale, "ledger/sales.html", "sales", "-date")
+
+
+@login_required
+def rate_list(request):
+    member = private_membership(request.user)
+    return render(
+        request,
+        "ledger/rates.html",
+        {
+            "membership": member,
+            "rates": FxRate.objects.filter(workspace=member.workspace).order_by("-ends_on"),
+        },
+    )
 
 
 def add_record(request, form_class, title):
     member = private_membership(request.user)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
-    form = form_class(request.POST or None)
+    form = form_class(request.POST or None, workspace=member.workspace)
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False)
         item.workspace = member.workspace
@@ -106,7 +145,7 @@ def edit_record(request, model, form_class, record_id, title):
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     record = get_object_or_404(model, id=record_id, workspace=member.workspace)
-    form = form_class(request.POST or None, instance=record)
+    form = form_class(request.POST or None, instance=record, workspace=member.workspace)
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, f"{title} updated.")
@@ -154,6 +193,62 @@ def edit_sale(request, sale_id):
 @login_required
 def delete_sale(request, sale_id):
     return delete_record(request, Sale, sale_id, "sale")
+
+
+@login_required
+def broker_management(request):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    return render(
+        request,
+        "ledger/brokers.html",
+        {"brokers": Broker.objects.filter(workspace=member.workspace)},
+    )
+
+
+@login_required
+def add_broker(request):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    form = BrokerForm(request.POST or None, workspace=member.workspace)
+    if request.method == "POST" and form.is_valid():
+        broker = form.save(commit=False)
+        broker.workspace = member.workspace
+        broker.save()
+        messages.success(request, "Broker saved.")
+        return redirect("broker_management")
+    return render(request, "ledger/form.html", {"form": form, "title": "broker"})
+
+
+@login_required
+def edit_broker(request, broker_id):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    broker = get_object_or_404(Broker, id=broker_id, workspace=member.workspace)
+    form = BrokerForm(request.POST or None, instance=broker, workspace=member.workspace)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Broker updated.")
+        return redirect("broker_management")
+    return render(request, "ledger/form.html", {"form": form, "title": "broker"})
+
+
+@login_required
+def delete_broker(request, broker_id):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    broker = get_object_or_404(Broker, id=broker_id, workspace=member.workspace)
+    if request.method == "POST":
+        broker.delete()
+        messages.success(
+            request, "Broker deleted. Associated records no longer have a broker assigned."
+        )
+        return redirect("broker_management")
+    return render(request, "ledger/confirm_delete_broker.html", {"broker": broker})
 
 
 @login_required
