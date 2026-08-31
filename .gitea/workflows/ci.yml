@@ -7,7 +7,7 @@ on:
 
 jobs:
   ci:
-    uses: git.tainton.uk/actions/gha-workflows/.gitea/workflows/ci-python-unified.yml@main
+    uses: actions/gha-workflows/.gitea/workflows/ci-python-unified.yml@main
     with:
       python-version: "3.14"
       package-manager: uv
