@@ -20,6 +20,7 @@ from .forms import (
     VestForm,
     WiseRateFetchForm,
 )
+from .fx import EventRateUnavailable, ensure_event_rate
 from .hmrc import HmrcRateUnavailable, fetch_usd_rate
 from .importers import UnsupportedImport, import_etrade_benefit_history
 from .models import Broker, FxRate, Grant, Sale, Vest, WorkspaceMembership
@@ -131,9 +132,14 @@ def add_record(request, form_class, title, fallback):
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False)
         item.workspace = member.workspace
-        item.save()
-        messages.success(request, f"{title} saved.")
-        return redirect(return_url(request, fallback))
+        try:
+            ensure_event_rate(member.workspace, item.date)
+        except EventRateUnavailable as exc:
+            form.add_error("date", str(exc))
+        else:
+            item.save()
+            messages.success(request, f"{title} saved.")
+            return redirect(return_url(request, fallback))
     return render(
         request,
         "ledger/form.html",
@@ -163,9 +169,14 @@ def edit_record(request, model, form_class, record_id, title, fallback):
     record = get_object_or_404(model, id=record_id, workspace=member.workspace)
     form = form_class(request.POST or None, instance=record, workspace=member.workspace)
     if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, f"{title} updated.")
-        return redirect(return_url(request, fallback))
+        try:
+            ensure_event_rate(member.workspace, form.cleaned_data["date"])
+        except EventRateUnavailable as exc:
+            form.add_error("date", str(exc))
+        else:
+            form.save()
+            messages.success(request, f"{title} updated.")
+            return redirect(return_url(request, fallback))
     return render(
         request,
         "ledger/form.html",

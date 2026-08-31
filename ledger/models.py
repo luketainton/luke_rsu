@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -65,7 +67,6 @@ class WorkspaceRecord(models.Model):
     date = models.DateField()
     units = models.DecimalField(max_digits=16, decimal_places=4)
     usd_price = models.DecimalField(max_digits=16, decimal_places=6, null=True, blank=True)
-    gbp_per_usd = models.DecimalField(max_digits=16, decimal_places=8, null=True, blank=True)
     notes = models.TextField(blank=True)
     source_key = models.CharField(max_length=64, null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -77,6 +78,18 @@ class WorkspaceRecord(models.Model):
             self.date.year if (self.date.month, self.date.day) >= (4, 5) else self.date.year - 1
         )
         return f"{start_year}/{(start_year + 1) % 100:02d}"
+
+    @property
+    def gbp_per_usd(self):
+        """Derive GBP per USD from the saved rate that covers this event date."""
+        rate = (
+            FxRate.objects.filter(
+                workspace=self.workspace, starts_on__lte=self.date, ends_on__gte=self.date
+            )
+            .order_by("-starts_on", "-id")
+            .first()
+        )
+        return None if rate is None else Decimal(1) / rate.usd_per_gbp
 
     class Meta:
         abstract = True
@@ -131,6 +144,7 @@ class FxRate(models.Model):
             ("monthly", "HMRC monthly"),
             ("average", "HMRC average"),
             ("wise", "Wise historical spot"),
+            ("manual", "Manual or migrated rate"),
         ],
     )
     starts_on = models.DateField()

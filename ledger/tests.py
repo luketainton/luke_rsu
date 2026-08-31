@@ -10,6 +10,7 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from openpyxl import Workbook
 
+from .hmrc import HmrcRate
 from .models import Broker, FxRate, Grant, Sale, Vest
 from .scim import ScimBearerAuthMiddleware
 
@@ -40,7 +41,15 @@ class WorkspaceIsolationTests(TestCase):
             date=date(2026, 1, 1),
             units=10,
             usd_price=100,
-            gbp_per_usd=0.8,
+        )
+        FxRate.objects.create(
+            workspace=self.bob.workspace_memberships.get().workspace,
+            label="2026 test rate",
+            method="manual",
+            starts_on=date(2026, 1, 1),
+            ends_on=date(2026, 12, 31),
+            usd_per_gbp=1.25,
+            source_url="https://example.test/rate",
         )
 
     def test_new_user_gets_an_owner_private_workspace(self):
@@ -69,7 +78,6 @@ class WorkspaceIsolationTests(TestCase):
                 "date": "2026-02-01",
                 "units": "12",
                 "usd_price": "123",
-                "gbp_per_usd": "0.8",
                 "withheld_units": "0",
                 "income_tax": "0",
                 "employee_nic": "0",
@@ -78,6 +86,31 @@ class WorkspaceIsolationTests(TestCase):
         self.assertRedirects(response, reverse("vest_list"))
         vest = Vest.objects.get(date=date(2026, 2, 1))
         self.assertEqual(vest.workspace, self.bob.workspace_memberships.get().workspace)
+
+    def test_event_creation_retrieves_and_uses_a_missing_rate(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        retrieved_rate = HmrcRate(
+            label="January 2027 HMRC monthly rate",
+            method="monthly",
+            starts_on=date(2027, 1, 1),
+            ends_on=date(2027, 1, 31),
+            usd_per_gbp=1.25,
+            source_url="https://example.test/hmrc-rate",
+        )
+        self.client.force_login(self.bob)
+        with patch("ledger.fx.fetch_hmrc_usd_rate", return_value=retrieved_rate) as fetch_rate:
+            response = self.client.post(
+                reverse("add_grant"),
+                {"date": "2027-01-15", "units": "12", "usd_price": "100"},
+            )
+        self.assertRedirects(response, reverse("grant_list"))
+        fetch_rate.assert_called_once_with("monthly", date(2027, 1, 15))
+        grant = Grant.objects.get(workspace=workspace, date=date(2027, 1, 15))
+        self.assertEqual(str(grant.gbp_per_usd), "0.8")
+        self.assertTrue(
+            FxRate.objects.filter(workspace=workspace, starts_on=date(2027, 1, 1)).exists()
+        )
+        self.assertNotContains(self.client.get(reverse("add_grant")), "Gbp per usd")
 
     def test_brokers_are_workspace_scoped_and_can_be_managed(self):
         own_broker = Broker.objects.create(
@@ -146,7 +179,6 @@ class WorkspaceIsolationTests(TestCase):
             date=date(2026, 3, 1),
             units=20,
             usd_price=100,
-            gbp_per_usd=0.8,
             notes="Annual award",
         )
         self.client.force_login(self.bob)
@@ -197,7 +229,6 @@ class WorkspaceIsolationTests(TestCase):
             date=date(2026, 3, 1),
             units=20,
             usd_price=100,
-            gbp_per_usd=0.8,
         )
         self.client.force_login(self.bob)
         destination = f"{reverse('grant_list')}?page=2"
@@ -207,7 +238,6 @@ class WorkspaceIsolationTests(TestCase):
                 "date": "2026-03-02",
                 "units": "25",
                 "usd_price": "110",
-                "gbp_per_usd": "0.79",
                 "notes": "Corrected award",
                 "next": destination,
             },
@@ -225,7 +255,6 @@ class WorkspaceIsolationTests(TestCase):
             date=date(2026, 3, 1),
             units=20,
             usd_price=100,
-            gbp_per_usd=0.8,
         )
         member = self.bob.workspace_memberships.get()
         member.role = "viewer"

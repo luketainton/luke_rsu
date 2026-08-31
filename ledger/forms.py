@@ -10,7 +10,7 @@ class RecordBaseForm(forms.ModelForm):
         self.fields["broker"].empty_label = "No broker selected"
 
     class Meta:
-        fields = ["grant_id", "broker", "date", "units", "usd_price", "gbp_per_usd", "notes"]
+        fields = ["grant_id", "broker", "date", "units", "usd_price", "notes"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 2}),
