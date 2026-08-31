@@ -25,7 +25,7 @@ app.use(session({
   store: new PgStore({ pool, tableName: 'user_sessions', createTableIfMissing: true }),
   secret: process.env.SESSION_SECRET || 'development-only-change-me',
   resave: false, saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 1000 * 60 * 60 * 12 },
+  cookie: { httpOnly: true, sameSite: 'lax', secure: appUrl.startsWith('https://'), maxAge: 1000 * 60 * 60 * 12 },
 }));
 app.use(passport.initialize()); app.use(passport.session());
 passport.serializeUser((user, done) => done(null, user.id));
