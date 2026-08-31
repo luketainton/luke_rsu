@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 
@@ -15,3 +16,5 @@ urlpatterns = [
     path("rates/add/", views.add_rate, name="add_rate"),
     path("access/", views.access_management, name="access_management"),
 ]
+if settings.SCIM_ENABLED:
+    urlpatterns.append(path("scim/v2/", include(("django_scim.urls", "scim"), namespace="scim")))

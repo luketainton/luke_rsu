@@ -28,6 +28,12 @@ https://your-rsu-host/accounts/oidc/company/login/callback/
 
 The client should be confidential and use the authorization-code flow. The generic OpenID Connect integration uses PKCE and fetches the provider's userinfo claims.
 
+## SCIM provisioning
+
+Set a long, independent `SCIM_BEARER_TOKEN` to enable the SCIM 2.0 endpoint at `/scim/v2/`. Provisioning clients must send `Authorization: Bearer <token>`; requests without the exact token receive `401`. Use a dedicated secret from your identity provider's provisioning configuration, not an end-user password or the Django secret key.
+
+SCIM creates and updates Django users. Each newly created user receives a private ledger workspace, but SCIM provisioning **does not** grant access to another user's workspace. Manage any deliberate shared access through the app's owner access-management page.
+
 ## Roles and data separation
 
 Every new user receives a separate private workspace. All grants, vests, sales and exchange-rate records are foreign-keyed to a workspace. Views derive the workspace only from the authenticated user’s membership, never from a browser-supplied workspace identifier.

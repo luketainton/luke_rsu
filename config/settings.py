@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "development-only-change-me")
@@ -58,3 +59,15 @@ if os.environ.get("OIDC_ISSUER_URL"):
         "secret": os.environ["OIDC_CLIENT_SECRET"],
         "settings": {"server_url": os.environ["OIDC_ISSUER_URL"], "fetch_userinfo": True, "oauth_pkce_enabled": True},
     }]}}
+
+SCIM_ENABLED = bool(os.environ.get("SCIM_BEARER_TOKEN"))
+if SCIM_ENABLED:
+    INSTALLED_APPS.append("django_scim")
+    scim_url = urlparse(os.environ.get("APP_URL", "http://localhost:8000"))
+    SCIM_SERVICE_PROVIDER = {
+        "NETLOC": scim_url.netloc,
+        "SCHEME": scim_url.scheme,
+        "AUTHENTICATION_SCHEMES": [{"type": "oauthbearertoken", "name": "Bearer token", "description": "Dedicated SCIM bearer token"}],
+        "AUTH_CHECK_MIDDLEWARE": "ledger.scim.ScimBearerAuthMiddleware",
+        "WWW_AUTHENTICATE_HEADER": "Bearer",
+    }

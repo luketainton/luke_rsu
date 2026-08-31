@@ -302,6 +302,20 @@ socialaccount = [
 ]
 
 [[package]]
+name = "django-scim2"
+version = "0.23.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+    { name = "pygments" },
+    { name = "scim2-filter-parser" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e6/a8/6f17eda83638fe47eea87aca5b5dcb0b5092c3db7552f92d35e2a278d69f/django_scim2-0.23.0.tar.gz", hash = "sha256:d3e2a405b705c2445e69b2b5e6105463b63339cd735c7a2edd5dfa4c52f60c0c", size = 26076, upload-time = "2026-08-12T15:03:38.648Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/27/9e5c0f4a99ded1cdc1310f58fb731551e8cec30a932a9c382e783985171f/django_scim2-0.23.0-py3-none-any.whl", hash = "sha256:0b537bd8a9d38fc8ba59fa983bf1e27bf022baaa70198174b953edc32651ebdb", size = 32135, upload-time = "2026-08-12T15:03:39.596Z" },
+]
+
+[[package]]
 name = "gunicorn"
 version = "23.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -486,6 +500,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "django" },
     { name = "django-allauth", extra = ["socialaccount"] },
+    { name = "django-scim2" },
     { name = "gunicorn" },
     { name = "psycopg", extra = ["binary"] },
     { name = "whitenoise" },
@@ -502,6 +517,7 @@ dev = [
 requires-dist = [
     { name = "django", specifier = ">=5.2,<5.3" },
     { name = "django-allauth", extras = ["socialaccount"], specifier = ">=65.12,<66" },
+    { name = "django-scim2", specifier = ">=0.23,<0.24" },
     { name = "gunicorn", specifier = ">=23,<24" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "whitenoise", specifier = ">=6.9,<7" },
@@ -537,6 +553,27 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ed/20/656d67f5b25ca9bda4e02b1de25867b2954e1d19e03648060f167ad0f4cc/ruff-0.16.5-py3-none-win32.whl", hash = "sha256:288b0a5f080492fe5635db849f9e2e84aa3cce7b7f0e955997d416c507c76a26", size = 10034250, upload-time = "2026-08-27T16:34:11.8Z" },
     { url = "https://files.pythonhosted.org/packages/5b/42/ee8e68a207b9127fcde6c3d7e197def432f346cb1af159e1fa14ca0d1cdc/ruff-0.16.5-py3-none-win_amd64.whl", hash = "sha256:ddc6385fb2137f616357ca03d6c74f4be987f80fed4008566b754f6032b8546f", size = 10516714, upload-time = "2026-08-27T16:34:13.963Z" },
     { url = "https://files.pythonhosted.org/packages/73/e3/7df5a396e445b9ba49ce9a9437439a4d80042c61c0ade199abf8d16de1ac/ruff-0.16.5-py3-none-win_arm64.whl", hash = "sha256:a64abe90968719b851bb7cedffaa8753fbdbdadab483089682db623f3edc587e", size = 10391564, upload-time = "2026-08-27T16:34:16.064Z" },
+]
+
+[[package]]
+name = "scim2-filter-parser"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "sly" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/25/c0/2f4d5caee8faa8f0d0979584c4aab95fa69d626d6f9d211dd6bb7089bc2f/scim2_filter_parser-0.7.0.tar.gz", hash = "sha256:1e11dbe2e186fc1be6d93732b467a3bbaa9deff272dfeb3a0540394cfab7030c", size = 21358, upload-time = "2024-07-20T16:38:23.2Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/57/54/b54961bfc5018fa593758c439fe0d4a22fbadfabff49a7559850af9a79e1/scim2_filter_parser-0.7.0-py3-none-any.whl", hash = "sha256:a74f90a2d52a77e0f1bc4d77e84b79f88749469f6f7192d64a4f92e4fe50ab69", size = 23409, upload-time = "2024-07-20T16:38:21.525Z" },
+]
+
+[[package]]
+name = "sly"
+version = "0.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/41/8a/59e943f7b27904c7756a7b565ffbd55f3841f5cd3d2da2b2b0713c49e488/sly-0.5.tar.gz", hash = "sha256:251d42015e8507158aec2164f06035df4a82b0314ce6450f457d7125e7649024", size = 66702, upload-time = "2022-10-25T14:35:30.592Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8e/4d/c96d807295183f2360329cd8d8bf5e8072c53d664125b3858c04153f026e/sly-0.5-py3-none-any.whl", hash = "sha256:20485483259eec7f6ba85ff4d2e96a4e50c6621902667fc2695cc8bc2a3e5133", size = 28864, upload-time = "2022-10-25T14:35:28.054Z" },
 ]
 
 [[package]]

@@ -8,6 +8,7 @@ dependencies = [
   "django-allauth[socialaccount]>=65.12,<66",
   "gunicorn>=23,<24",
   "psycopg[binary]>=3.2,<4",
+  "django-scim2>=0.23,<0.24",
   "whitenoise>=6.9,<7",
 ]
 
