@@ -3,7 +3,7 @@
 <section class="card">
   <h1>Delete broker?</h1>
   <p>This removes {{ broker.name }} from the broker list. Records using it will remain, but their broker will be cleared.</p>
-  <form method="post" class="inline-form">{% csrf_token %}<button class="danger" type="submit">Delete broker</button></form>
-  <a href="{% url 'broker_management' %}">Cancel</a>
+  <form method="post" class="inline-form">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}"><button class="danger" type="submit">Delete broker</button></form>
+  <a href="{{ next }}">Cancel</a>
 </section>
 {% endblock %}

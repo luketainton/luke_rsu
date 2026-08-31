@@ -3,6 +3,6 @@
 <section class="card">
   <h1>Retrieve HMRC USD rate</h1>
   <p>Monthly rates use the selected calendar month. Spot and average rates use the applicable HMRC 31 March or 31 December publication period.</p>
-  <form method="post">{% csrf_token %}{{ form.as_p }}<button>Retrieve and save</button> <a href="{% url 'dashboard' %}">Cancel</a></form>
+  <form method="post">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}">{{ form.as_p }}<button>Retrieve and save</button> <a href="{{ next }}">Cancel</a></form>
 </section>
 {% endblock %}

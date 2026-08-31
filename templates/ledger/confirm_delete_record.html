@@ -3,7 +3,7 @@
 <section class="card">
   <h1>Delete {{ title }}?</h1>
   <p>This permanently removes the {{ title }} dated {{ record.date }} for {{ record.units }} units.</p>
-  <form method="post" class="inline-form">{% csrf_token %}<button class="danger" type="submit">Delete {{ title }}</button></form>
-  <a href="{% url 'dashboard' %}">Cancel</a>
+  <form method="post" class="inline-form">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}"><button class="danger" type="submit">Delete {{ title }}</button></form>
+  <a href="{{ next }}">Cancel</a>
 </section>
 {% endblock %}

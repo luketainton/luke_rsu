@@ -3,6 +3,6 @@
 <section class="card">
   <h1>Retrieve Wise GBP/USD rate</h1>
   <p>Wise is queried for its historical spot rate at noon UTC on the selected event date. The Wise token remains on the server and is never stored with your ledger data.</p>
-  <form method="post">{% csrf_token %}{{ form.as_p }}<button>Retrieve and save</button> <a href="{% url 'dashboard' %}">Cancel</a></form>
+  <form method="post">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}">{{ form.as_p }}<button>Retrieve and save</button> <a href="{{ next }}">Cancel</a></form>
 </section>
 {% endblock %}

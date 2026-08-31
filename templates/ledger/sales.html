@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="actions"><h1>Sales</h1>{% if membership.role != 'viewer' %}<a href="{% url 'add_sale' %}"><button>Add sale</button></a>{% endif %}</div>
+<div class="actions"><h1>Sales</h1>{% if membership.role != 'viewer' %}<a href="{% url 'add_sale' %}?next={{ request.get_full_path|urlencode }}"><button>Add sale</button></a>{% endif %}</div>
 <div class="table-scroll"><table><tr><th>Grant ID</th><th>Broker</th><th>Date</th><th>UK tax year</th><th>Units</th><th>USD price</th><th>GBP/USD</th><th>Fees</th>{% if membership.role != 'viewer' %}<th>Actions</th>{% endif %}</tr>
-{% for sale in sales %}<tr><td>{{ sale.grant_id|default:"—" }}</td><td>{{ sale.broker|default:"—" }}</td><td>{{ sale.date }}</td><td>{{ sale.hmrc_financial_year }}</td><td>{{ sale.units }}</td><td>{{ sale.usd_price }}</td><td>{{ sale.gbp_per_usd }}</td><td>£{{ sale.fees_gbp }}</td>{% if membership.role != 'viewer' %}<td><a href="{% url 'edit_sale' sale.id %}">Edit</a> · <a href="{% url 'delete_sale' sale.id %}">Delete</a></td>{% endif %}</tr>
+{% for sale in sales %}<tr><td>{{ sale.grant_id|default:"—" }}</td><td>{{ sale.broker|default:"—" }}</td><td>{{ sale.date }}</td><td>{{ sale.hmrc_financial_year }}</td><td>{{ sale.units }}</td><td>{{ sale.usd_price }}</td><td>{{ sale.gbp_per_usd }}</td><td>£{{ sale.fees_gbp }}</td>{% if membership.role != 'viewer' %}<td><a href="{% url 'edit_sale' sale.id %}?next={{ request.get_full_path|urlencode }}">Edit</a> · <a href="{% url 'delete_sale' sale.id %}?next={{ request.get_full_path|urlencode }}">Delete</a></td>{% endif %}</tr>
 {% empty %}<tr><td colspan="9">No sales recorded.</td></tr>{% endfor %}</table></div>
 {% endblock %}

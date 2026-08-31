@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="actions"><h1>Grants</h1>{% if membership.role != 'viewer' %}<a href="{% url 'add_grant' %}"><button>Add grant</button></a>{% endif %}</div>
+<div class="actions"><h1>Grants</h1>{% if membership.role != 'viewer' %}<a href="{% url 'add_grant' %}?next={{ request.get_full_path|urlencode }}"><button>Add grant</button></a>{% endif %}</div>
 <div class="table-scroll"><table><tr><th>Grant ID</th><th>Broker</th><th>Date</th><th>UK tax year</th><th>Units</th><th>USD price</th><th>GBP/USD</th><th>Notes</th>{% if membership.role != 'viewer' %}<th>Actions</th>{% endif %}</tr>
-{% for grant in grants %}<tr><td>{{ grant.grant_id|default:"—" }}</td><td>{{ grant.broker|default:"—" }}</td><td>{{ grant.date }}</td><td>{{ grant.hmrc_financial_year }}</td><td>{{ grant.units }}</td><td>{{ grant.usd_price }}</td><td>{{ grant.gbp_per_usd }}</td><td>{{ grant.notes|default:"—" }}</td>{% if membership.role != 'viewer' %}<td><a href="{% url 'edit_grant' grant.id %}">Edit</a> · <a href="{% url 'delete_grant' grant.id %}">Delete</a></td>{% endif %}</tr>
+{% for grant in grants %}<tr><td>{{ grant.grant_id|default:"—" }}</td><td>{{ grant.broker|default:"—" }}</td><td>{{ grant.date }}</td><td>{{ grant.hmrc_financial_year }}</td><td>{{ grant.units }}</td><td>{{ grant.usd_price }}</td><td>{{ grant.gbp_per_usd }}</td><td>{{ grant.notes|default:"—" }}</td>{% if membership.role != 'viewer' %}<td><a href="{% url 'edit_grant' grant.id %}?next={{ request.get_full_path|urlencode }}">Edit</a> · <a href="{% url 'delete_grant' grant.id %}?next={{ request.get_full_path|urlencode }}">Delete</a></td>{% endif %}</tr>
 {% empty %}<tr><td colspan="9">No grants recorded.</td></tr>{% endfor %}</table></div>
 {% endblock %}

@@ -6,6 +6,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from .forms import (
     BenefitHistoryImportForm,
@@ -35,6 +37,16 @@ def private_membership(user):
 
 def can_edit(member):
     return member.role in {"owner", "editor"}
+
+
+def return_url(request, fallback):
+    """Return a same-site destination supplied by the originating list page."""
+    candidate = request.POST.get("next") or request.GET.get("next")
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return candidate
+    return reverse(fallback)
 
 
 def login_view(request):
@@ -111,7 +123,7 @@ def rate_list(request):
     )
 
 
-def add_record(request, form_class, title):
+def add_record(request, form_class, title, fallback):
     member = private_membership(request.user)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
@@ -121,26 +133,30 @@ def add_record(request, form_class, title):
         item.workspace = member.workspace
         item.save()
         messages.success(request, f"{title} saved.")
-        return redirect("dashboard")
-    return render(request, "ledger/form.html", {"form": form, "title": title})
+        return redirect(return_url(request, fallback))
+    return render(
+        request,
+        "ledger/form.html",
+        {"form": form, "title": title, "next": return_url(request, fallback)},
+    )
 
 
 @login_required
 def add_grant(request):
-    return add_record(request, GrantForm, "Grant")
+    return add_record(request, GrantForm, "Grant", "grant_list")
 
 
 @login_required
 def edit_grant(request, grant_id):
-    return edit_record(request, Grant, GrantForm, grant_id, "Grant")
+    return edit_record(request, Grant, GrantForm, grant_id, "Grant", "grant_list")
 
 
 @login_required
 def delete_grant(request, grant_id):
-    return delete_record(request, Grant, grant_id, "grant")
+    return delete_record(request, Grant, grant_id, "grant", "grant_list")
 
 
-def edit_record(request, model, form_class, record_id, title):
+def edit_record(request, model, form_class, record_id, title, fallback):
     member = private_membership(request.user)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
@@ -149,11 +165,15 @@ def edit_record(request, model, form_class, record_id, title):
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, f"{title} updated.")
-        return redirect("dashboard")
-    return render(request, "ledger/form.html", {"form": form, "title": f"Edit {title.lower()}"})
+        return redirect(return_url(request, fallback))
+    return render(
+        request,
+        "ledger/form.html",
+        {"form": form, "title": f"Edit {title.lower()}", "next": return_url(request, fallback)},
+    )
 
 
-def delete_record(request, model, record_id, title):
+def delete_record(request, model, record_id, title, fallback):
     member = private_membership(request.user)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
@@ -161,38 +181,42 @@ def delete_record(request, model, record_id, title):
     if request.method == "POST":
         record.delete()
         messages.success(request, f"{title.capitalize()} deleted.")
-        return redirect("dashboard")
-    return render(request, "ledger/confirm_delete_record.html", {"record": record, "title": title})
+        return redirect(return_url(request, fallback))
+    return render(
+        request,
+        "ledger/confirm_delete_record.html",
+        {"record": record, "title": title, "next": return_url(request, fallback)},
+    )
 
 
 @login_required
 def add_vest(request):
-    return add_record(request, VestForm, "Vest")
+    return add_record(request, VestForm, "Vest", "vest_list")
 
 
 @login_required
 def edit_vest(request, vest_id):
-    return edit_record(request, Vest, VestForm, vest_id, "Vest")
+    return edit_record(request, Vest, VestForm, vest_id, "Vest", "vest_list")
 
 
 @login_required
 def delete_vest(request, vest_id):
-    return delete_record(request, Vest, vest_id, "vest")
+    return delete_record(request, Vest, vest_id, "vest", "vest_list")
 
 
 @login_required
 def add_sale(request):
-    return add_record(request, SaleForm, "Sale")
+    return add_record(request, SaleForm, "Sale", "sale_list")
 
 
 @login_required
 def edit_sale(request, sale_id):
-    return edit_record(request, Sale, SaleForm, sale_id, "Sale")
+    return edit_record(request, Sale, SaleForm, sale_id, "Sale", "sale_list")
 
 
 @login_required
 def delete_sale(request, sale_id):
-    return delete_record(request, Sale, sale_id, "sale")
+    return delete_record(request, Sale, sale_id, "sale", "sale_list")
 
 
 @login_required
@@ -218,8 +242,12 @@ def add_broker(request):
         broker.workspace = member.workspace
         broker.save()
         messages.success(request, "Broker saved.")
-        return redirect("broker_management")
-    return render(request, "ledger/form.html", {"form": form, "title": "broker"})
+        return redirect(return_url(request, "broker_management"))
+    return render(
+        request,
+        "ledger/form.html",
+        {"form": form, "title": "broker", "next": return_url(request, "broker_management")},
+    )
 
 
 @login_required
@@ -232,8 +260,12 @@ def edit_broker(request, broker_id):
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "Broker updated.")
-        return redirect("broker_management")
-    return render(request, "ledger/form.html", {"form": form, "title": "broker"})
+        return redirect(return_url(request, "broker_management"))
+    return render(
+        request,
+        "ledger/form.html",
+        {"form": form, "title": "broker", "next": return_url(request, "broker_management")},
+    )
 
 
 @login_required
@@ -247,8 +279,12 @@ def delete_broker(request, broker_id):
         messages.success(
             request, "Broker deleted. Associated records no longer have a broker assigned."
         )
-        return redirect("broker_management")
-    return render(request, "ledger/confirm_delete_broker.html", {"broker": broker})
+        return redirect(return_url(request, "broker_management"))
+    return render(
+        request,
+        "ledger/confirm_delete_broker.html",
+        {"broker": broker, "next": return_url(request, "broker_management")},
+    )
 
 
 @login_required
@@ -270,13 +306,31 @@ def import_etrade_history(request):
                     **counts
                 ),
             )
-            return redirect("dashboard")
-    return render(request, "ledger/import.html", {"form": form})
+            return redirect(return_url(request, "dashboard"))
+    return render(
+        request,
+        "ledger/import.html",
+        {"form": form, "next": return_url(request, "dashboard")},
+    )
 
 
 @login_required
 def add_rate(request):
-    return add_record(request, FxRateForm, "Exchange rate")
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    form = FxRateForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        rate = form.save(commit=False)
+        rate.workspace = member.workspace
+        rate.save()
+        messages.success(request, "Exchange rate saved.")
+        return redirect(return_url(request, "rate_list"))
+    return render(
+        request,
+        "ledger/form.html",
+        {"form": form, "title": "Exchange rate", "next": return_url(request, "rate_list")},
+    )
 
 
 @login_required
@@ -303,8 +357,12 @@ def fetch_hmrc_rate(request):
                 },
             )
             messages.success(request, "HMRC USD rate retrieved and saved.")
-            return redirect("dashboard")
-    return render(request, "ledger/fetch_hmrc_rate.html", {"form": form})
+            return redirect(return_url(request, "rate_list"))
+    return render(
+        request,
+        "ledger/fetch_hmrc_rate.html",
+        {"form": form, "next": return_url(request, "rate_list")},
+    )
 
 
 @login_required
@@ -331,8 +389,12 @@ def fetch_wise_rate(request):
                 },
             )
             messages.success(request, "Wise GBP/USD rate retrieved and saved.")
-            return redirect("dashboard")
-    return render(request, "ledger/fetch_wise_rate.html", {"form": form})
+            return redirect(return_url(request, "rate_list"))
+    return render(
+        request,
+        "ledger/fetch_wise_rate.html",
+        {"form": form, "next": return_url(request, "rate_list")},
+    )
 
 
 @login_required
@@ -345,8 +407,12 @@ def edit_rate(request, rate_id):
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "Exchange rate updated.")
-        return redirect("dashboard")
-    return render(request, "ledger/form.html", {"form": form, "title": "Edit HMRC rate"})
+        return redirect(return_url(request, "rate_list"))
+    return render(
+        request,
+        "ledger/form.html",
+        {"form": form, "title": "Edit HMRC rate", "next": return_url(request, "rate_list")},
+    )
 
 
 @login_required
@@ -358,8 +424,12 @@ def delete_rate(request, rate_id):
     if request.method == "POST":
         rate.delete()
         messages.success(request, "HMRC rate deleted.")
-        return redirect("dashboard")
-    return render(request, "ledger/confirm_delete_rate.html", {"rate": rate})
+        return redirect(return_url(request, "rate_list"))
+    return render(
+        request,
+        "ledger/confirm_delete_rate.html",
+        {"rate": rate, "next": return_url(request, "rate_list")},
+    )
 
 
 @login_required

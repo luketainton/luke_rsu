@@ -75,7 +75,7 @@ class WorkspaceIsolationTests(TestCase):
                 "employee_nic": "0",
             },
         )
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(response, reverse("vest_list"))
         vest = Vest.objects.get(date=date(2026, 2, 1))
         self.assertEqual(vest.workspace, self.bob.workspace_memberships.get().workspace)
 
@@ -104,7 +104,7 @@ class WorkspaceIsolationTests(TestCase):
                 "units": "12",
             },
         )
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(response, reverse("grant_list"))
         grant = Grant.objects.get(grant_id="RSU-2026")
         self.assertEqual(grant.broker, own_broker)
         self.assertContains(self.client.get(reverse("grant_list")), "RSU-2026")
@@ -200,6 +200,7 @@ class WorkspaceIsolationTests(TestCase):
             gbp_per_usd=0.8,
         )
         self.client.force_login(self.bob)
+        destination = f"{reverse('grant_list')}?page=2"
         response = self.client.post(
             reverse("edit_grant", args=[grant.id]),
             {
@@ -208,13 +209,14 @@ class WorkspaceIsolationTests(TestCase):
                 "usd_price": "110",
                 "gbp_per_usd": "0.79",
                 "notes": "Corrected award",
+                "next": destination,
             },
         )
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(response, destination)
         grant.refresh_from_db()
         self.assertEqual(grant.units, 25)
         response = self.client.post(reverse("delete_grant", args=[grant.id]))
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(response, reverse("grant_list"))
         self.assertFalse(Grant.objects.filter(id=grant.id).exists())
 
     def test_viewer_cannot_edit_or_delete_a_grant(self):
@@ -272,11 +274,11 @@ class WorkspaceIsolationTests(TestCase):
                 "source_url": "https://example.test/hmrc-spot-rate",
             },
         )
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(response, reverse("rate_list"))
         rate.refresh_from_db()
         self.assertEqual(rate.method, "spot")
         response = self.client.post(reverse("delete_rate", args=[rate.id]))
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(response, reverse("rate_list"))
         self.assertFalse(FxRate.objects.filter(id=rate.id).exists())
 
     def test_viewer_cannot_edit_or_delete_an_hmrc_rate(self):
@@ -311,14 +313,14 @@ class WorkspaceIsolationTests(TestCase):
                 "employee_nic": "0",
             },
         )
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(response, reverse("vest_list"))
         vest.refresh_from_db()
         self.assertEqual(vest.units, 25)
         response = self.client.post(
             reverse("edit_sale", args=[sale.id]),
             {"date": "2026-03-03", "units": "12", "fees_gbp": "1.25"},
         )
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(response, reverse("sale_list"))
         sale.refresh_from_db()
         self.assertEqual(sale.units, 12)
         self.client.post(reverse("delete_vest", args=[vest.id]))
@@ -417,7 +419,7 @@ class ImportAndRateFetchTests(TestCase):
             response = self.client.post(
                 reverse("fetch_hmrc_rate"), {"method": "monthly", "rate_date": "2026-05-15"}
             )
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(response, reverse("rate_list"))
         rate = FxRate.objects.get(workspace=self.workspace)
         self.assertEqual(str(rate.usd_per_gbp), "1.35020000")
         self.assertEqual(rate.starts_on, date(2026, 5, 1))
@@ -441,7 +443,7 @@ class ImportAndRateFetchTests(TestCase):
             patch("ledger.wise.urlopen", return_value=Response()) as urlopen,
         ):
             response = self.client.post(reverse("fetch_wise_rate"), {"rate_date": "2026-05-15"})
-        self.assertRedirects(response, reverse("dashboard"))
+        self.assertRedirects(response, reverse("rate_list"))
         rate = FxRate.objects.get(workspace=self.workspace, method="wise")
         self.assertEqual(str(rate.usd_per_gbp), "1.27890000")
         self.assertEqual(rate.starts_on, date(2026, 5, 15))
