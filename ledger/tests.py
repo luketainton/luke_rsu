@@ -226,6 +226,52 @@ class WorkspaceIsolationTests(TestCase):
         response = self.client.get(reverse("grant_list"), {"sort": "not-a-field"})
         self.assertEqual(response.status_code, 200)
 
+    def test_vest_and_sale_forms_use_selected_broker_grant_ids(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        broker = Broker.objects.create(workspace=workspace, name="Charles Schwab")
+        other_broker = Broker.objects.create(workspace=workspace, name="E*TRADE")
+        Grant.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="SCHWAB-2026",
+            date=date(2026, 1, 1),
+            units=10,
+        )
+        Grant.objects.create(
+            workspace=workspace,
+            broker=other_broker,
+            grant_id="ETRADE-2026",
+            date=date(2026, 1, 1),
+            units=10,
+        )
+        self.client.force_login(self.bob)
+
+        response = self.client.get(reverse("add_vest"))
+        self.assertLess(response.content.find(b"Broker"), response.content.find(b"Grant id"))
+        self.assertContains(response, "data-grant-id-select")
+        response = self.client.get(reverse("broker_grant_ids", args=[broker.id]))
+        self.assertEqual(response.json(), {"grant_ids": ["SCHWAB-2026"]})
+
+        response = self.client.post(
+            reverse("add_sale"),
+            {"broker": broker.id, "grant_id": "ETRADE-2026", "date": "2026-03-02", "units": "1"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select a valid choice")
+
+    def test_broker_grant_ids_are_workspace_scoped(self):
+        own_broker = Broker.objects.create(
+            workspace=self.bob.workspace_memberships.get().workspace, name="Charles Schwab"
+        )
+        other_broker = Broker.objects.create(workspace=self.alice_workspace, name="Private broker")
+        self.client.force_login(self.bob)
+        self.assertEqual(
+            self.client.get(reverse("broker_grant_ids", args=[other_broker.id])).status_code, 404
+        )
+        self.assertEqual(
+            self.client.get(reverse("broker_grant_ids", args=[own_broker.id])).status_code, 200
+        )
+
     def test_dashboard_shows_compact_summary_and_record_pages_are_isolated(self):
         own_grant = Grant.objects.create(
             workspace=self.bob.workspace_memberships.get().workspace,

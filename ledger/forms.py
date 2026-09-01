@@ -10,7 +10,7 @@ class RecordBaseForm(forms.ModelForm):
         self.fields["broker"].empty_label = "No broker selected"
 
     class Meta:
-        fields = ["grant_id", "broker", "date", "units", "usd_price", "notes"]
+        fields = ["broker", "grant_id", "date", "units", "usd_price", "notes"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 2}),
@@ -26,13 +26,34 @@ class GrantForm(RecordBaseForm):
         return self.cleaned_data["ticker"].strip().upper()
 
 
-class VestForm(RecordBaseForm):
+class BrokerGrantRecordForm(RecordBaseForm):
+    """Use the selected broker's existing grants as vest/sale Grant ID choices."""
+
+    def __init__(self, *args, workspace, **kwargs):
+        super().__init__(*args, workspace=workspace, **kwargs)
+        broker_id = self.data.get(self.add_prefix("broker")) if self.is_bound else None
+        broker_id = broker_id or self.initial.get("broker") or self.instance.broker_id
+        grant_ids = []
+        if broker_id:
+            grant_ids = Grant.objects.filter(workspace=workspace, broker_id=broker_id).exclude(
+                grant_id=""
+            )
+            grant_ids = grant_ids.order_by("grant_id").values_list("grant_id", flat=True).distinct()
+        self.fields["grant_id"] = forms.ChoiceField(
+            choices=[("", "No Grant ID selected")]
+            + [(grant_id, grant_id) for grant_id in grant_ids],
+            required=False,
+            widget=forms.Select(attrs={"data-grant-id-select": "true"}),
+        )
+
+
+class VestForm(BrokerGrantRecordForm):
     class Meta(RecordBaseForm.Meta):
         model = Vest
         fields = RecordBaseForm.Meta.fields + ["withheld_units", "income_tax", "employee_nic"]
 
 
-class SaleForm(RecordBaseForm):
+class SaleForm(BrokerGrantRecordForm):
     class Meta(RecordBaseForm.Meta):
         model = Sale
         fields = RecordBaseForm.Meta.fields + ["fees_gbp"]

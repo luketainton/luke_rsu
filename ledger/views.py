@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
 from django.db.models import Q
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -438,6 +438,21 @@ def broker_management(request):
         "ledger/brokers.html",
         {"brokers": brokers, "q": search, "sort": sort, "sort_options": sort_options},
     )
+
+
+@login_required
+def broker_grant_ids(request, broker_id):
+    """Return only the current workspace's non-blank Grant IDs for a broker."""
+    member = private_membership(request.user)
+    broker = get_object_or_404(Broker, id=broker_id, workspace=member.workspace)
+    grant_ids = (
+        Grant.objects.filter(workspace=member.workspace, broker=broker)
+        .exclude(grant_id="")
+        .order_by("grant_id")
+        .values_list("grant_id", flat=True)
+        .distinct()
+    )
+    return JsonResponse({"grant_ids": list(grant_ids)})
 
 
 @login_required

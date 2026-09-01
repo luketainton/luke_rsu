@@ -1,1 +1,23 @@
-{% extends "base.html" %}{% block content %}<section class="card"><h1>Add {{ title }}</h1><form method="post">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}">{{ form.as_p }}<button>Save</button> <a href="{{ next }}">Cancel</a></form></section>{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+<section class="card"><h1>Add {{ title }}</h1><form method="post">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}">{{ form.as_p }}<button>Save</button> <a href="{{ next }}">Cancel</a></form></section>
+{% endblock %}
+{% block extra_script %}
+<script>
+  const brokerSelect = document.getElementById("id_broker");
+  const grantIdSelect = document.querySelector("[data-grant-id-select]");
+  if (brokerSelect && grantIdSelect) {
+    const endpointTemplate = "{% url 'broker_grant_ids' 0 %}";
+    brokerSelect.addEventListener("change", async () => {
+      const selectedGrantId = grantIdSelect.value;
+      grantIdSelect.replaceChildren(new Option("No Grant ID selected", ""));
+      if (!brokerSelect.value) return;
+      const response = await fetch(endpointTemplate.replace("/0/", `/${brokerSelect.value}/`));
+      if (!response.ok) return;
+      const data = await response.json();
+      data.grant_ids.forEach((grantId) => grantIdSelect.add(new Option(grantId, grantId)));
+      grantIdSelect.value = selectedGrantId;
+    });
+  }
+</script>
+{% endblock %}

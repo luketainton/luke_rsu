@@ -42,5 +42,6 @@
     <main>{% for message in messages %}<p class="message">{{ message }}</p>{% endfor %}{% block content %}{% endblock %}</main>
   </div>
   <script>const savedTheme = localStorage.getItem("rsu-theme"); if (["charcoal", "navy"].includes(savedTheme)) document.documentElement.dataset.theme = savedTheme; document.querySelectorAll("[data-theme-choice]").forEach((button) => button.addEventListener("click", () => { const theme = button.dataset.themeChoice; document.documentElement.dataset.theme = theme; localStorage.setItem("rsu-theme", theme); }));</script>
+  {% block extra_script %}{% endblock %}
 </body>
 </html>

@@ -23,6 +23,7 @@ urlpatterns = [
     path("sales/<int:sale_id>/delete/", views.delete_sale, name="delete_sale"),
     path("sales/", views.sale_list, name="sale_list"),
     path("brokers/", views.broker_management, name="broker_management"),
+    path("brokers/<int:broker_id>/grant-ids/", views.broker_grant_ids, name="broker_grant_ids"),
     path("brokers/add/", views.add_broker, name="add_broker"),
     path("brokers/<int:broker_id>/edit/", views.edit_broker, name="edit_broker"),
     path("brokers/<int:broker_id>/delete/", views.delete_broker, name="delete_broker"),
