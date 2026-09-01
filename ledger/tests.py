@@ -657,6 +657,9 @@ class WorkspaceIsolationTests(TestCase):
     def test_live_stock_price_uses_a_per_workspace_fifteen_minute_cache(self):
         workspace = self.bob.workspace_memberships.get().workspace
         Security.objects.create(workspace=workspace, name="Microsoft", ticker="MSFT")
+        Security.objects.create(
+            workspace=workspace, name="Microsoft RSUs", ticker="MSFT", share_class="RSU"
+        )
         now = datetime(2026, 3, 2, 12, tzinfo=UTC)
         payload = json.dumps({"c": 420.5, "t": int(now.timestamp())}).encode()
         with (

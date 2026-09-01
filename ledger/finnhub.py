@@ -77,7 +77,15 @@ def refresh_live_price(workspace, ticker, now=None):
     ):
         return latest, False
     quote = fetch_quote(ticker)
-    security = Security.objects.get(workspace=workspace, ticker=ticker)
+    # A workspace may have multiple share classes with the same ticker. Use
+    # the base security when present, otherwise choose the oldest deterministically.
+    security = (
+        Security.objects.filter(workspace=workspace, ticker=ticker)
+        .order_by("share_class", "id")
+        .first()
+    )
+    if security is None:
+        raise FinnhubQuoteUnavailable(f"No security is configured for {ticker}.")
     price, _ = StockPrice.objects.update_or_create(
         workspace=workspace,
         security=security,
