@@ -1,7 +1,17 @@
 from django import forms
 
 from .importers import IMPORT_TYPE_CHOICES
-from .models import Broker, FxRate, Grant, Sale, Security, StockPrice, Vest, WorkspaceMembership
+from .models import (
+    Broker,
+    FxRate,
+    Grant,
+    Sale,
+    Security,
+    StockPrice,
+    Vest,
+    Workspace,
+    WorkspaceMembership,
+)
 
 
 class RecordBaseForm(forms.ModelForm):
@@ -124,6 +134,18 @@ class StockPriceForm(forms.ModelForm):
 class MembershipForm(forms.Form):
     email = forms.EmailField()
     role = forms.ChoiceField(choices=WorkspaceMembership.Role.choices)
+
+
+class WorkspaceForm(forms.ModelForm):
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+        if not name:
+            raise forms.ValidationError("Enter a ledger name.")
+        return name
+
+    class Meta:
+        model = Workspace
+        fields = ["name"]
 
 
 class BenefitHistoryImportForm(forms.Form):

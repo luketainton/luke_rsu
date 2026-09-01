@@ -16,7 +16,7 @@ from openpyxl import Workbook
 from .dashboard_data import dashboard_summary, ticker_positions
 from .finnhub import refresh_live_price
 from .hmrc import HmrcRate
-from .models import Broker, FxRate, Grant, Sale, StockPrice, Vest
+from .models import Broker, FxRate, Grant, Sale, StockPrice, Vest, Workspace, WorkspaceMembership
 from .scim import ScimBearerAuthMiddleware
 from .section104 import section_104_report
 
@@ -62,6 +62,47 @@ class WorkspaceIsolationTests(TestCase):
         membership = self.bob.workspace_memberships.get()
         self.assertEqual(membership.role, "owner")
         self.assertNotEqual(membership.workspace_id, self.alice_workspace.id)
+
+    def test_user_can_switch_between_ledgers(self):
+        second_workspace = Workspace.objects.create(name="Shared ledger")
+        WorkspaceMembership.objects.create(
+            workspace=second_workspace, user=self.bob, role=WorkspaceMembership.Role.VIEWER
+        )
+        Grant.objects.create(
+            workspace=second_workspace, grant_id="SHARED-GRANT", date=date(2026, 1, 1), units=5
+        )
+        self.client.force_login(self.bob)
+        response = self.client.post(
+            reverse("switch_workspace"),
+            {"workspace_id": second_workspace.id, "next": reverse("grant_list")},
+        )
+        self.assertRedirects(response, reverse("grant_list"))
+        self.assertContains(self.client.get(reverse("grant_list")), "SHARED-GRANT")
+
+    def test_user_cannot_switch_to_an_unshared_ledger(self):
+        self.client.force_login(self.bob)
+        response = self.client.post(
+            reverse("switch_workspace"), {"workspace_id": self.alice_workspace.id}
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_user_can_create_a_private_ledger(self):
+        self.client.force_login(self.bob)
+        response = self.client.post(reverse("create_workspace"), {"name": "Tax year 2026"})
+        self.assertRedirects(response, reverse("dashboard"))
+        workspace = Workspace.objects.get(name="Tax year 2026")
+        membership = WorkspaceMembership.objects.get(workspace=workspace, user=self.bob)
+        self.assertEqual(membership.role, WorkspaceMembership.Role.OWNER)
+        self.assertEqual(self.client.session["active_workspace_id"], workspace.id)
+
+    def test_account_area_uses_name_then_email_fallback(self):
+        self.alice.first_name = "Alice"
+        self.alice.last_name = "Example"
+        self.alice.save(update_fields=["first_name", "last_name"])
+        self.client.force_login(self.alice)
+        self.assertContains(self.client.get(reverse("dashboard")), "Alice Example")
+        self.client.force_login(self.bob)
+        self.assertContains(self.client.get(reverse("dashboard")), self.bob.email)
 
     def test_dashboard_does_not_show_another_private_workspace_records(self):
         self.client.force_login(self.bob)

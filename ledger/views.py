@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
 from django.db.models import Q
-from django.http import HttpResponseForbidden, JsonResponse
+from django.http import HttpResponseForbidden, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -24,6 +24,7 @@ from .forms import (
     StockPriceForm,
     VestForm,
     WiseRateFetchForm,
+    WorkspaceForm,
 )
 from .fx import EventRateUnavailable, ensure_event_rate
 from .hmrc import HmrcRateUnavailable, fetch_usd_rate
@@ -35,18 +36,25 @@ from .importers import (
     import_schwab_equity_details,
     import_schwab_transaction_history,
 )
-from .models import Broker, FxRate, Grant, Sale, Security, StockPrice, Vest, WorkspaceMembership
+from .models import (
+    Broker,
+    FxRate,
+    Grant,
+    Sale,
+    Security,
+    StockPrice,
+    Vest,
+    Workspace,
+    WorkspaceMembership,
+)
 from .section104 import section_104_report
 from .wise import WiseRateUnavailable
 from .wise import fetch_usd_rate as fetch_wise_usd_rate
+from .workspaces import active_membership, membership_for_workspace
 
 
-def private_membership(user):
-    return (
-        user.workspace_memberships.select_related("workspace")
-        .order_by("workspace__created_at")
-        .first()
-    )
+def request_membership(request):
+    return active_membership(request)
 
 
 def can_edit(member):
@@ -83,8 +91,36 @@ def logout_view(request):
 
 
 @login_required
+def switch_workspace(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    membership = membership_for_workspace(request.user, request.POST.get("workspace_id"))
+    if membership is None:
+        return HttpResponseForbidden("Ledger access required")
+    request.session["active_workspace_id"] = membership.workspace_id
+    return redirect(return_url(request, "dashboard"))
+
+
+@login_required
+def create_workspace(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    form = WorkspaceForm(request.POST)
+    if form.is_valid():
+        workspace = Workspace.objects.create(name=form.cleaned_data["name"])
+        WorkspaceMembership.objects.create(
+            workspace=workspace, user=request.user, role=WorkspaceMembership.Role.OWNER
+        )
+        request.session["active_workspace_id"] = workspace.id
+        messages.success(request, "Ledger created.")
+        return redirect("dashboard")
+    messages.error(request, "; ".join(error for errors in form.errors.values() for error in errors))
+    return redirect("dashboard")
+
+
+@login_required
 def dashboard(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     workspace = member.workspace
     grants = list(Grant.objects.filter(workspace=workspace).select_related("broker"))
     vests = list(Vest.objects.filter(workspace=workspace).order_by("date", "id"))
@@ -144,7 +180,7 @@ def filtered_table(request, queryset, search_fields, sort_options, default_sort)
 def list_records(
     request, model, template, context_name, sort_options, default_sort, search_fields=None
 ):
-    member = private_membership(request.user)
+    member = request_membership(request)
     records, search, sort = filtered_table(
         request,
         model.objects.filter(workspace=member.workspace).select_related("broker"),
@@ -223,7 +259,7 @@ def sale_list(request):
 
 @login_required
 def rate_list(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     sort_options = [
         ("-ends_on", "Latest period first"),
         ("ends_on", "Earliest period first"),
@@ -252,7 +288,7 @@ def rate_list(request):
 
 @login_required
 def price_list(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     live_price_errors = []
     tracked_tickers = (
         Grant.objects.filter(workspace=member.workspace)
@@ -297,7 +333,7 @@ def price_list(request):
 
 @login_required
 def security_list(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     securities = Security.objects.filter(workspace=member.workspace)
     return render(
         request, "ledger/securities.html", {"membership": member, "securities": securities}
@@ -306,7 +342,7 @@ def security_list(request):
 
 @login_required
 def add_security(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     form = SecurityForm(request.POST or None)
@@ -325,7 +361,7 @@ def add_security(request):
 
 @login_required
 def edit_security(request, security_id):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     security = get_object_or_404(Security, id=security_id, workspace=member.workspace)
@@ -343,7 +379,7 @@ def edit_security(request, security_id):
 
 @login_required
 def delete_security(request, security_id):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     security = get_object_or_404(Security, id=security_id, workspace=member.workspace)
@@ -362,7 +398,7 @@ def delete_security(request, security_id):
 
 @login_required
 def section_104_working_paper(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     security_id = request.GET.get("security")
     securities = Security.objects.filter(workspace=member.workspace)
     if security_id:
@@ -386,7 +422,7 @@ def section_104_working_paper(request):
 
 
 def add_record(request, form_class, title, fallback):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     form = form_class(request.POST or None, workspace=member.workspace)
@@ -424,7 +460,7 @@ def delete_grant(request, grant_id):
 
 
 def edit_record(request, model, form_class, record_id, title, fallback):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     record = get_object_or_404(model, id=record_id, workspace=member.workspace)
@@ -446,7 +482,7 @@ def edit_record(request, model, form_class, record_id, title, fallback):
 
 
 def delete_record(request, model, record_id, title, fallback):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     record = get_object_or_404(model, id=record_id, workspace=member.workspace)
@@ -463,7 +499,7 @@ def delete_record(request, model, record_id, title, fallback):
 
 @login_required
 def add_price(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     form = StockPriceForm(request.POST or None)
@@ -482,7 +518,7 @@ def add_price(request):
 
 @login_required
 def edit_price(request, price_id):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     price = get_object_or_404(StockPrice, id=price_id, workspace=member.workspace)
@@ -500,7 +536,7 @@ def edit_price(request, price_id):
 
 @login_required
 def delete_price(request, price_id):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     price = get_object_or_404(StockPrice, id=price_id, workspace=member.workspace)
@@ -547,7 +583,7 @@ def delete_sale(request, sale_id):
 
 @login_required
 def broker_management(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     sort_options = [("name", "Name A–Z"), ("-name", "Name Z–A")]
@@ -568,7 +604,7 @@ def broker_management(request):
 @login_required
 def broker_grant_ids(request, broker_id):
     """Return only the current workspace's non-blank Grant IDs for a broker."""
-    member = private_membership(request.user)
+    member = request_membership(request)
     broker = get_object_or_404(Broker, id=broker_id, workspace=member.workspace)
     grant_ids = (
         Grant.objects.filter(workspace=member.workspace, broker=broker)
@@ -582,7 +618,7 @@ def broker_grant_ids(request, broker_id):
 
 @login_required
 def add_broker(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     form = BrokerForm(request.POST or None, workspace=member.workspace)
@@ -601,7 +637,7 @@ def add_broker(request):
 
 @login_required
 def edit_broker(request, broker_id):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     broker = get_object_or_404(Broker, id=broker_id, workspace=member.workspace)
@@ -619,7 +655,7 @@ def edit_broker(request, broker_id):
 
 @login_required
 def delete_broker(request, broker_id):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     broker = get_object_or_404(Broker, id=broker_id, workspace=member.workspace)
@@ -638,7 +674,7 @@ def delete_broker(request, broker_id):
 
 @login_required
 def import_etrade_history(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     form = BenefitHistoryImportForm(request.POST or None, request.FILES or None)
@@ -680,7 +716,7 @@ def import_etrade_history(request):
 
 @login_required
 def add_rate(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     form = FxRateForm(request.POST or None)
@@ -699,7 +735,7 @@ def add_rate(request):
 
 @login_required
 def fetch_hmrc_rate(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     form = HmrcRateFetchForm(request.POST or None)
@@ -731,7 +767,7 @@ def fetch_hmrc_rate(request):
 
 @login_required
 def fetch_wise_rate(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     form = WiseRateFetchForm(request.POST or None)
@@ -763,7 +799,7 @@ def fetch_wise_rate(request):
 
 @login_required
 def edit_rate(request, rate_id):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     rate = get_object_or_404(FxRate, id=rate_id, workspace=member.workspace)
@@ -781,7 +817,7 @@ def edit_rate(request, rate_id):
 
 @login_required
 def delete_rate(request, rate_id):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     rate = get_object_or_404(FxRate, id=rate_id, workspace=member.workspace)
@@ -798,7 +834,7 @@ def delete_rate(request, rate_id):
 
 @login_required
 def access_management(request):
-    member = private_membership(request.user)
+    member = request_membership(request)
     if member.role != "owner":
         return HttpResponseForbidden("Owner permission required")
     form = MembershipForm(request.POST or None)
