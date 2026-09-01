@@ -1,5 +1,7 @@
 import json
-from datetime import date
+import os
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from io import BytesIO
 from unittest.mock import patch
 
@@ -10,8 +12,9 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from openpyxl import Workbook
 
+from .finnhub import refresh_live_price
 from .hmrc import HmrcRate
-from .models import Broker, FxRate, Grant, Sale, Vest
+from .models import Broker, FxRate, Grant, Sale, StockPrice, Vest
 from .scim import ScimBearerAuthMiddleware
 
 
@@ -315,6 +318,62 @@ class WorkspaceIsolationTests(TestCase):
         self.assertContains(response, "Exchange rates")
         self.assertContains(response, rate.label)
         self.assertContains(response, reverse("edit_rate", args=[rate.id]))
+
+    def test_tickers_and_stock_prices_are_workspace_scoped(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        grant = Grant.objects.create(
+            workspace=workspace,
+            date=date(2026, 3, 1),
+            units=20,
+            ticker="MSFT",
+        )
+        other_price = StockPrice.objects.create(
+            workspace=self.alice_workspace,
+            ticker="AAPL",
+            price_date=date(2026, 3, 1),
+            usd_price=200,
+        )
+        self.client.force_login(self.bob)
+        response = self.client.post(
+            reverse("add_price"),
+            {
+                "ticker": " msft ",
+                "price_date": "2026-03-02",
+                "usd_price": "420.50",
+                "source_url": "example.test/quote",
+                "notes": "Manual close",
+            },
+        )
+        self.assertRedirects(response, reverse("price_list"))
+        price = StockPrice.objects.get(workspace=workspace)
+        self.assertEqual(price.ticker, "MSFT")
+        self.assertEqual(price.source_url, "https://example.test/quote")
+        response = self.client.get(reverse("price_list"))
+        self.assertContains(response, "MSFT")
+        self.assertNotContains(response, "AAPL")
+        self.assertContains(self.client.get(reverse("grant_list")), grant.ticker)
+        self.assertEqual(
+            self.client.get(reverse("edit_price", args=[other_price.id])).status_code, 404
+        )
+
+    @override_settings(STOCK_PRICE_REFRESH_MINUTES=15)
+    def test_live_stock_price_uses_a_per_workspace_fifteen_minute_cache(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        now = datetime(2026, 3, 2, 12, tzinfo=UTC)
+        payload = json.dumps({"c": 420.5, "t": int(now.timestamp())}).encode()
+        with (
+            patch.dict(os.environ, {"FINNHUB_API_KEY": "test-token"}),
+            patch("ledger.finnhub.urlopen") as urlopen,
+        ):
+            urlopen.return_value.__enter__.return_value.read.return_value = payload
+            price, refreshed = refresh_live_price(workspace, "MSFT", now=now)
+            cached_price, refreshed_again = refresh_live_price(workspace, "MSFT", now=now)
+        self.assertTrue(refreshed)
+        self.assertFalse(refreshed_again)
+        self.assertEqual(urlopen.call_count, 1)
+        self.assertEqual(price.usd_price, Decimal("420.5"))
+        self.assertEqual(cached_price.id, price.id)
+        self.assertEqual(price.source, "finnhub")
 
     def test_editor_can_edit_and_delete_an_hmrc_rate(self):
         rate = FxRate.objects.create(

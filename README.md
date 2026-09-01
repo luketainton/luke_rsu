@@ -35,6 +35,13 @@ Bearer token to Wise and is never stored in the database or exposed in the brows
 retrieves the GBP-to-USD historical rate at noon UTC on the selected event date and stores the
 timestamped source URL alongside the resulting rate.
 
+## Optional Finnhub live stock prices
+
+Set `FINNHUB_API_KEY` to retrieve current USD quotes for the non-blank tickers on Grants. The
+Stock prices page refreshes a ticker only when its saved Finnhub quote is older than
+`STOCK_PRICE_REFRESH_MINUTES` (15 by default). The token is sent only to Finnhub; it is not
+stored in the database, included in source links, or exposed to the browser.
+
 ## SCIM provisioning
 
 Set a long, independent `SCIM_BEARER_TOKEN` to enable the SCIM 2.0 endpoint at `/scim/v2/`. Provisioning clients must send `Authorization: Bearer <token>`; requests without the exact token receive `401`. Use a dedicated secret from your identity provider's provisioning configuration, not an end-user password or the Django secret key.

@@ -109,6 +109,7 @@ if os.environ.get("OIDC_ISSUER_URL"):
     }
 
 SCIM_ENABLED = bool(os.environ.get("SCIM_BEARER_TOKEN"))
+STOCK_PRICE_REFRESH_MINUTES = int(os.environ.get("STOCK_PRICE_REFRESH_MINUTES", "15"))
 if SCIM_ENABLED:
     INSTALLED_APPS.append("django_scim")
     scim_url = urlparse(os.environ.get("APP_URL", "http://localhost:8000"))

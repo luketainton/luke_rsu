@@ -33,6 +33,10 @@ urlpatterns = [
     path("rates/fetch-wise/", views.fetch_wise_rate, name="fetch_wise_rate"),
     path("rates/<int:rate_id>/edit/", views.edit_rate, name="edit_rate"),
     path("rates/<int:rate_id>/delete/", views.delete_rate, name="delete_rate"),
+    path("prices/", views.price_list, name="price_list"),
+    path("prices/add/", views.add_price, name="add_price"),
+    path("prices/<int:price_id>/edit/", views.edit_price, name="edit_price"),
+    path("prices/<int:price_id>/delete/", views.delete_price, name="delete_price"),
     path("access/", views.access_management, name="access_management"),
 ]
 if settings.SCIM_ENABLED:

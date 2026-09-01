@@ -31,6 +31,7 @@
         <a class="{% if request.resolver_match.url_name == 'vest_list' %}active{% endif %}" href="{% url 'vest_list' %}">Vests</a>
         <a class="{% if request.resolver_match.url_name == 'sale_list' %}active{% endif %}" href="{% url 'sale_list' %}">Sales</a>
         <a class="{% if request.resolver_match.url_name == 'rate_list' %}active{% endif %}" href="{% url 'rate_list' %}">Exchange rates</a>
+        <a class="{% if request.resolver_match.url_name == 'price_list' %}active{% endif %}" href="{% url 'price_list' %}">Stock prices</a>
         {% if membership.role != 'viewer' %}<a class="{% if request.resolver_match.url_name == 'broker_management' %}active{% endif %}" href="{% url 'broker_management' %}">Brokers</a>{% endif %}
         {% if membership.role != 'viewer' %}<a class="{% if request.resolver_match.url_name == 'import_etrade_history' %}active{% endif %}" href="{% url 'import_etrade_history' %}">Import history</a>{% endif %}
         {% if membership.role == 'owner' %}<a class="{% if request.resolver_match.url_name == 'access_management' %}active{% endif %}" href="{% url 'access_management' %}">Access</a>{% endif %}

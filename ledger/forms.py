@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Broker, FxRate, Grant, Sale, Vest, WorkspaceMembership
+from .models import Broker, FxRate, Grant, Sale, StockPrice, Vest, WorkspaceMembership
 
 
 class RecordBaseForm(forms.ModelForm):
@@ -20,6 +20,10 @@ class RecordBaseForm(forms.ModelForm):
 class GrantForm(RecordBaseForm):
     class Meta(RecordBaseForm.Meta):
         model = Grant
+        fields = ["broker", "grant_id", "ticker", "date", "units", "usd_price", "notes"]
+
+    def clean_ticker(self):
+        return self.cleaned_data["ticker"].strip().upper()
 
 
 class VestForm(RecordBaseForm):
@@ -62,6 +66,21 @@ class FxRateForm(forms.ModelForm):
         widgets = {
             "starts_on": forms.DateInput(attrs={"type": "date"}),
             "ends_on": forms.DateInput(attrs={"type": "date"}),
+        }
+
+
+class StockPriceForm(forms.ModelForm):
+    source_url = forms.URLField(required=False, assume_scheme="https")
+
+    def clean_ticker(self):
+        return self.cleaned_data["ticker"].strip().upper()
+
+    class Meta:
+        model = StockPrice
+        fields = ["ticker", "price_date", "usd_price", "source_url", "notes"]
+        widgets = {
+            "price_date": forms.DateInput(attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 2}),
         }
 
 

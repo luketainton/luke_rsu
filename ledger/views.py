@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from .finnhub import FinnhubQuoteUnavailable, is_configured, refresh_live_price
 from .forms import (
     BenefitHistoryImportForm,
     BrokerForm,
@@ -18,13 +19,14 @@ from .forms import (
     HmrcRateFetchForm,
     MembershipForm,
     SaleForm,
+    StockPriceForm,
     VestForm,
     WiseRateFetchForm,
 )
 from .fx import EventRateUnavailable, ensure_event_rate
 from .hmrc import HmrcRateUnavailable, fetch_usd_rate
 from .importers import UnsupportedImport, import_etrade_benefit_history
-from .models import Broker, FxRate, Grant, Sale, Vest, WorkspaceMembership
+from .models import Broker, FxRate, Grant, Sale, StockPrice, Vest, WorkspaceMembership
 from .wise import WiseRateUnavailable
 from .wise import fetch_usd_rate as fetch_wise_usd_rate
 
@@ -104,12 +106,14 @@ def filtered_table(request, queryset, search_fields, sort_options, default_sort)
     return queryset.order_by(sort), search, sort
 
 
-def list_records(request, model, template, context_name, sort_options, default_sort):
+def list_records(
+    request, model, template, context_name, sort_options, default_sort, search_fields=None
+):
     member = private_membership(request.user)
     records, search, sort = filtered_table(
         request,
         model.objects.filter(workspace=member.workspace).select_related("broker"),
-        ["grant_id", "broker__name", "notes"],
+        search_fields or ["grant_id", "broker__name", "notes"],
         sort_options,
         default_sort,
     )
@@ -137,10 +141,12 @@ def grant_list(request):
             ("-date", "Newest first"),
             ("date", "Oldest first"),
             ("grant_id", "Grant ID"),
+            ("ticker", "Ticker"),
             ("broker__name", "Broker"),
             ("-units", "Most units"),
         ],
         "-date",
+        ["grant_id", "ticker", "broker__name", "notes"],
     )
 
 
@@ -205,6 +211,51 @@ def rate_list(request):
             "q": search,
             "sort": sort,
             "sort_options": sort_options,
+        },
+    )
+
+
+@login_required
+def price_list(request):
+    member = private_membership(request.user)
+    live_price_errors = []
+    tracked_tickers = (
+        Grant.objects.filter(workspace=member.workspace)
+        .exclude(ticker="")
+        .order_by("ticker")
+        .values_list("ticker", flat=True)
+        .distinct()
+    )
+    if is_configured():
+        for ticker in tracked_tickers:
+            try:
+                refresh_live_price(member.workspace, ticker)
+            except FinnhubQuoteUnavailable as exc:
+                live_price_errors.append(str(exc))
+    sort_options = [
+        ("-price_date", "Latest first"),
+        ("price_date", "Oldest first"),
+        ("ticker", "Ticker"),
+        ("-usd_price", "Highest price"),
+    ]
+    prices, search, sort = filtered_table(
+        request,
+        StockPrice.objects.filter(workspace=member.workspace),
+        ["ticker", "notes"],
+        sort_options,
+        "-price_date",
+    )
+    return render(
+        request,
+        "ledger/prices.html",
+        {
+            "membership": member,
+            "prices": prices,
+            "q": search,
+            "sort": sort,
+            "sort_options": sort_options,
+            "live_price_configured": is_configured(),
+            "live_price_errors": live_price_errors,
         },
     )
 
@@ -282,6 +333,60 @@ def delete_record(request, model, record_id, title, fallback):
         request,
         "ledger/confirm_delete_record.html",
         {"record": record, "title": title, "next": return_url(request, fallback)},
+    )
+
+
+@login_required
+def add_price(request):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    form = StockPriceForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        price = form.save(commit=False)
+        price.workspace = member.workspace
+        price.save()
+        messages.success(request, "Stock price saved.")
+        return redirect(return_url(request, "price_list"))
+    return render(
+        request,
+        "ledger/form.html",
+        {"form": form, "title": "Stock price", "next": return_url(request, "price_list")},
+    )
+
+
+@login_required
+def edit_price(request, price_id):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    price = get_object_or_404(StockPrice, id=price_id, workspace=member.workspace)
+    form = StockPriceForm(request.POST or None, instance=price)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Stock price updated.")
+        return redirect(return_url(request, "price_list"))
+    return render(
+        request,
+        "ledger/form.html",
+        {"form": form, "title": "Stock price", "next": return_url(request, "price_list")},
+    )
+
+
+@login_required
+def delete_price(request, price_id):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    price = get_object_or_404(StockPrice, id=price_id, workspace=member.workspace)
+    if request.method == "POST":
+        price.delete()
+        messages.success(request, "Stock price deleted.")
+        return redirect(return_url(request, "price_list"))
+    return render(
+        request,
+        "ledger/confirm_delete_price.html",
+        {"price": price, "next": return_url(request, "price_list")},
     )
 
 

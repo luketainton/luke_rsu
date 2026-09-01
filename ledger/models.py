@@ -96,6 +96,8 @@ class WorkspaceRecord(models.Model):
 
 
 class Grant(WorkspaceRecord):
+    ticker = models.CharField(max_length=20, blank=True)
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -151,6 +153,32 @@ class FxRate(models.Model):
     ends_on = models.DateField()
     usd_per_gbp = models.DecimalField(max_digits=16, decimal_places=8)
     source_url = models.URLField()
+
+
+class StockPrice(models.Model):
+    """A dated USD share price kept separately for each private workspace."""
+
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="stock_prices")
+    ticker = models.CharField(max_length=20)
+    price_date = models.DateField()
+    usd_price = models.DecimalField(max_digits=16, decimal_places=6)
+    source = models.CharField(
+        max_length=20,
+        choices=[("manual", "Manual"), ("finnhub", "Finnhub live quote")],
+        default="manual",
+    )
+    fetched_at = models.DateTimeField(null=True, blank=True)
+    source_url = models.URLField(blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "ticker", "price_date", "source"],
+                name="unique_workspace_ticker_price_date_source",
+            )
+        ]
+        ordering = ["ticker", "-price_date"]
 
 
 @receiver(post_save, sender=User)
