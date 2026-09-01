@@ -1,8 +1,9 @@
+import csv
 import json
 import os
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from io import BytesIO
+from io import BytesIO, StringIO
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -677,6 +678,246 @@ def benefit_history_file():
     return stream
 
 
+def legacy_stock_transactions_file():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "My Stock Transactions"
+    for row in [
+        ["My Stock Transactions"],
+        [],
+        ["ID:", "541076"],
+        [],
+        [],
+        [],
+        [
+            "Date of Transaction",
+            "Transaction Type",
+            "Shares Exercised/Vested",
+            "Grant Number",
+            "Grant Date",
+            "Grant Type",
+            "Grant Price",
+            "Total Grant Value",
+            "Sale Price/FMV",
+            "Total Sales Price",
+            "Gross Proceeds",
+            "Taxes",
+            "SEC and Broker Fees",
+            "Net Proceeds",
+            "Shares used for Taxes",
+            "Shares Distributed",
+            "Cash Tendered",
+            "Deferral Status",
+        ],
+        [
+            "2025-May-10",
+            "Lapse",
+            31,
+            "1663132",
+            "2023-Nov-08",
+            "RSU",
+            0,
+            0,
+            59.77,
+            0,
+            0,
+            870.85,
+            0,
+            0,
+            15,
+            16,
+            0,
+            None,
+        ],
+        ["Total", None, 31],
+    ]:
+        sheet.append(row)
+    stream = BytesIO()
+    workbook.save(stream)
+    stream.seek(0)
+    stream.name = "My_Stock_Transactions.xlsx"
+    return stream
+
+
+def legacy_restricted_stock_file():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "My Restricted Stock"
+    for row in [
+        ["My Restricted Stock"],
+        [],
+        ["ID:", "541076"],
+        [],
+        [],
+        [],
+        [
+            None,
+            "Award Detail",
+            "undefined",
+            "undefined",
+            "undefined",
+            "undefined",
+            "undefined",
+            "undefined",
+            "undefined",
+            "undefined",
+            "Vesting & Modeled Value Detail",
+        ],
+        [
+            "Status",
+            "Award Number",
+            "Award Date",
+            "Plan",
+            "Type",
+            "Class",
+            "Grant Value Awarded",
+            "Conversion Price*",
+            "Stock Price at Grant Date**",
+            "Shares Awarded",
+            "Vested Shares Released",
+            "Unvested Shares",
+            "Unvested Shares Value",
+            "FMV/Model Price",
+            "Shares Retired to Pay for Taxes",
+            "Next Vest Date",
+            "Next Vest Date Shares",
+            "Selected Broker",
+        ],
+        [
+            "Accepted",
+            "1694119",
+            "2024-Nov-05",
+            5,
+            "RSU",
+            "REFRESHV",
+            25000,
+            55.29,
+            None,
+            453,
+            0,
+            453,
+            31116.57,
+            68.69,
+            0,
+            "2025-Nov-10",
+            154,
+            "Charles Schwab",
+        ],
+        ["Total", None, None, None, None, None, None, None, None, 453],
+    ]:
+        sheet.append(row)
+    stream = BytesIO()
+    workbook.save(stream)
+    stream.seek(0)
+    stream.name = "My_Restricted_Stock.xlsx"
+    return stream
+
+
+def schwab_equity_details_file():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Equity Award Shares"
+    sheet.append(
+        [
+            "Award Date",
+            "Symbol",
+            "Award ID",
+            "Share Type",
+            "Market Value",
+            "Date Holding Period Met",
+            "Deposit Date",
+            "Date Acquired",
+            "Acquisition Price",
+            "Shares",
+            "Available to Sell",
+        ]
+    )
+    sheet.append(
+        [
+            "11-09-2022",
+            "CSCO",
+            "1601764",
+            "Restricted Stock",
+            9105.1,
+            "N/A",
+            "11-13-2023",
+            "11-10-2023",
+            52,
+            157,
+            83,
+        ]
+    )
+    sheet.append(["Totals"])
+    stream = BytesIO()
+    workbook.save(stream)
+    stream.seek(0)
+    stream.name = "EquityAwardsCenter_EquityDetails.xlsx"
+    return stream
+
+
+def schwab_transaction_history_file():
+    fields = [
+        "Date",
+        "Action",
+        "Symbol",
+        "Description",
+        "Quantity",
+        "Type",
+        "Shares",
+        "SalePrice",
+        "PurchaseDate",
+        "PurchasePrice",
+        "GrantId",
+        "VestDate",
+        "VestFairMarketValue",
+        "TotalCostBasis",
+        "RealizedGainLoss",
+        "HoldingPeriod",
+        "AwardId",
+    ]
+    rows = [
+        {
+            "Date": "05/13/2025",
+            "Action": "Deposit",
+            "Symbol": "CSCO",
+            "Description": "RS",
+            "Quantity": "20",
+        },
+        {"PurchaseDate": "05/10/2025", "PurchasePrice": "$59.77", "AwardId": "1601764"},
+        {
+            "Date": "02/04/2026",
+            "Action": "Sale",
+            "Symbol": "CSCO",
+            "Description": "Share Sale",
+            "Quantity": "22",
+        },
+        {
+            "Type": "RS",
+            "Shares": "22",
+            "SalePrice": "$82.00",
+            "GrantId": "1601764",
+            "VestDate": "08/10/2024",
+            "VestFairMarketValue": "$45.47",
+            "TotalCostBasis": "$1,000.34",
+            "RealizedGainLoss": "$803.66",
+            "HoldingPeriod": "LONG TERM",
+        },
+        {
+            "Date": "07/22/2026",
+            "Action": "Tax Withholding",
+            "Symbol": "CSCO",
+            "Description": "Tax Withholding",
+        },
+    ]
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writeheader()
+    writer.writerows(rows)
+    stream = BytesIO(output.getvalue().encode())
+    stream.name = "EquityAwardsCenter_Transactions.csv"
+    return stream
+
+
 class ImportAndRateFetchTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
@@ -710,6 +951,76 @@ class ImportAndRateFetchTests(TestCase):
         self.assertEqual(Grant.objects.filter(workspace=self.workspace).count(), 1)
         self.assertEqual(Vest.objects.filter(workspace=self.workspace).count(), 1)
         self.assertEqual(Sale.objects.filter(workspace=self.workspace).count(), 1)
+
+    def test_legacy_stock_transactions_import_lapses_as_vests(self):
+        response = self.client.post(
+            reverse("import_etrade_history"),
+            {
+                "import_type": "legacy_stock_transactions",
+                "file": legacy_stock_transactions_file(),
+            },
+        )
+        self.assertRedirects(response, reverse("dashboard"))
+        vest = Vest.objects.get(workspace=self.workspace)
+        self.assertEqual(vest.grant_id, "1663132")
+        self.assertEqual(vest.units, 31)
+        self.assertEqual(vest.usd_price, Decimal("59.77"))
+        self.assertEqual(vest.withheld_units, 15)
+        self.assertEqual(vest.income_tax, Decimal("870.85"))
+
+    def test_legacy_restricted_stock_imports_awards_and_broker(self):
+        response = self.client.post(
+            reverse("import_etrade_history"),
+            {
+                "import_type": "legacy_restricted_stock",
+                "file": legacy_restricted_stock_file(),
+            },
+        )
+        self.assertRedirects(response, reverse("dashboard"))
+        grant = Grant.objects.get(workspace=self.workspace)
+        self.assertEqual(grant.grant_id, "1694119")
+        self.assertEqual(grant.date, date(2024, 11, 5))
+        self.assertEqual(grant.units, 453)
+        self.assertEqual(grant.usd_price, Decimal("55.29"))
+        self.assertEqual(grant.broker.name, "Charles Schwab")
+
+    def test_schwab_equity_details_imports_acquired_shares_as_vest(self):
+        response = self.client.post(
+            reverse("import_etrade_history"),
+            {
+                "import_type": "schwab_equity_details",
+                "file": schwab_equity_details_file(),
+            },
+        )
+        self.assertRedirects(response, reverse("dashboard"))
+        vest = Vest.objects.get(workspace=self.workspace)
+        self.assertEqual(vest.grant_id, "1601764")
+        self.assertEqual(vest.date, date(2023, 11, 10))
+        self.assertEqual(vest.units, 157)
+        self.assertEqual(vest.usd_price, 52)
+        self.assertEqual(vest.withheld_units, 74)
+        self.assertEqual(vest.broker.name, "Charles Schwab")
+
+    def test_schwab_transaction_history_imports_deposits_and_sales(self):
+        response = self.client.post(
+            reverse("import_etrade_history"),
+            {
+                "import_type": "schwab_transaction_history",
+                "file": schwab_transaction_history_file(),
+            },
+        )
+        self.assertRedirects(response, reverse("dashboard"))
+        vest = Vest.objects.get(workspace=self.workspace)
+        self.assertEqual(vest.grant_id, "1601764")
+        self.assertEqual(vest.date, date(2025, 5, 13))
+        self.assertEqual(vest.units, 20)
+        self.assertEqual(vest.usd_price, Decimal("59.77"))
+        sale = Sale.objects.get(workspace=self.workspace)
+        self.assertEqual(sale.grant_id, "1601764")
+        self.assertEqual(sale.date, date(2026, 2, 4))
+        self.assertEqual(sale.units, 22)
+        self.assertEqual(sale.usd_price, Decimal("82.00"))
+        self.assertEqual(sale.broker.name, "Charles Schwab")
 
     def test_hmrc_fetch_saves_rate_from_official_csv(self):
         csv_content = (

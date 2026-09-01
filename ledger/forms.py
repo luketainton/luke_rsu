@@ -1,5 +1,6 @@
 from django import forms
 
+from .importers import IMPORT_TYPE_CHOICES
 from .models import Broker, FxRate, Grant, Sale, Security, StockPrice, Vest, WorkspaceMembership
 
 
@@ -126,12 +127,21 @@ class MembershipForm(forms.Form):
 
 
 class BenefitHistoryImportForm(forms.Form):
-    file = forms.FileField(help_text="Upload an E*TRADE Benefit History .xlsx export.")
+    import_type = forms.ChoiceField(
+        choices=IMPORT_TYPE_CHOICES,
+        required=False,
+        initial="etrade_benefit_history",
+        label="Import type",
+    )
+    file = forms.FileField(help_text="Upload an Excel .xlsx or CSV export.")
+
+    def clean_import_type(self):
+        return self.cleaned_data.get("import_type") or "etrade_benefit_history"
 
     def clean_file(self):
         upload = self.cleaned_data["file"]
-        if not upload.name.lower().endswith(".xlsx"):
-            raise forms.ValidationError("Upload an Excel .xlsx file.")
+        if not upload.name.lower().endswith((".xlsx", ".csv")):
+            raise forms.ValidationError("Upload an Excel .xlsx or CSV file.")
         if upload.size > 10 * 1024 * 1024:
             raise forms.ValidationError("The import file must be no larger than 10 MB.")
         return upload

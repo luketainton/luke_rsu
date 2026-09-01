@@ -27,7 +27,14 @@ from .forms import (
 )
 from .fx import EventRateUnavailable, ensure_event_rate
 from .hmrc import HmrcRateUnavailable, fetch_usd_rate
-from .importers import UnsupportedImport, import_etrade_benefit_history
+from .importers import (
+    UnsupportedImport,
+    import_etrade_benefit_history,
+    import_legacy_restricted_stock,
+    import_legacy_stock_transactions,
+    import_schwab_equity_details,
+    import_schwab_transaction_history,
+)
 from .models import Broker, FxRate, Grant, Sale, Security, StockPrice, Vest, WorkspaceMembership
 from .section104 import section_104_report
 from .wise import WiseRateUnavailable
@@ -637,7 +644,16 @@ def import_etrade_history(request):
     form = BenefitHistoryImportForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
         try:
-            counts = import_etrade_benefit_history(form.cleaned_data["file"], member.workspace)
+            importers = {
+                "etrade_benefit_history": import_etrade_benefit_history,
+                "legacy_stock_transactions": import_legacy_stock_transactions,
+                "legacy_restricted_stock": import_legacy_restricted_stock,
+                "schwab_equity_details": import_schwab_equity_details,
+                "schwab_transaction_history": import_schwab_transaction_history,
+            }
+            counts = importers[form.cleaned_data["import_type"]](
+                form.cleaned_data["file"], member.workspace
+            )
         except UnsupportedImport as exc:
             form.add_error("file", str(exc))
         else:
@@ -648,6 +664,12 @@ def import_etrade_history(request):
                     **counts
                 ),
             )
+            if counts.get("unrecognised_transaction_types"):
+                messages.warning(
+                    request,
+                    "These transaction types were not imported because their "
+                    f"meaning is not mapped yet: {counts['unrecognised_transaction_types']}.",
+                )
             return redirect(return_url(request, "dashboard"))
     return render(
         request,

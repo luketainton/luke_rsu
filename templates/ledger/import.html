@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="card">
-  <h1>Import E*TRADE Benefit History</h1>
-  <p>The export is treated as a complete history. Events already imported from E*TRADE are skipped. The file does not provide USD sale prices, so imported sales need completing before CGT reporting.</p>
+  <h1>Import history</h1>
+  <p>Select the source format. Existing records are skipped when the same file is imported again.</p>
   <form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}">{{ form.as_p }}<button>Import history</button> <a href="{{ next }}">Cancel</a></form>
 </section>
 {% endblock %}
