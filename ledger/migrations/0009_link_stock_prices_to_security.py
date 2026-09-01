@@ -27,6 +27,10 @@ def link_stock_prices_to_securities(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # PostgreSQL cannot alter a table while FK trigger events from the
+    # backfill above are still pending in the same transaction.
+    atomic = False
+
     dependencies = [("ledger", "0008_security_grant_security_and_more")]
 
     operations = [
