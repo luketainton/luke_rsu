@@ -60,6 +60,30 @@ class Broker(models.Model):
         return self.name
 
 
+class Security(models.Model):
+    """One class of shares, with its own UK Section 104 holding."""
+
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="securities")
+    name = models.CharField(max_length=160)
+    ticker = models.CharField(max_length=20)
+    isin = models.CharField(max_length=12, blank=True)
+    share_class = models.CharField(max_length=80, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "ticker", "share_class"],
+                name="unique_workspace_security_share_class",
+            )
+        ]
+        ordering = ["ticker", "share_class", "name"]
+
+    def __str__(self):
+        if self.share_class:
+            return f"{self.ticker} ({self.share_class})"
+        return f"{self.ticker} — {self.name}"
+
+
 class WorkspaceRecord(models.Model):
     workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE)
     grant_id = models.CharField(max_length=120, blank=True)
@@ -97,6 +121,7 @@ class WorkspaceRecord(models.Model):
 
 class Grant(WorkspaceRecord):
     ticker = models.CharField(max_length=20, blank=True)
+    security = models.ForeignKey(Security, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
         constraints = [

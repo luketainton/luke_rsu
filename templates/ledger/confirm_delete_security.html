@@ -1,0 +1,4 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card"><h1>Delete security?</h1><p>This removes {{ security }}. Linked Grants will no longer be included in the Section 104 working paper until they are relinked.</p><form method="post" class="inline-form">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}"><button class="danger" type="submit">Delete security</button></form> <a href="{{ next }}">Cancel</a></section>
+{% endblock %}

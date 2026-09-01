@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="actions"><h1>Securities</h1>{% if membership.role != 'viewer' %}<a href="{% url 'add_security' %}"><button>Add security</button></a>{% endif %}</div>
+<p class="muted">Each share class has a separate Section 104 holding. Link a Grant to a security before relying on the CGT working paper.</p>
+<div class="table-scroll"><table><tr><th>Ticker</th><th>Name</th><th>Share class</th><th>ISIN</th>{% if membership.role != 'viewer' %}<th>Actions</th>{% endif %}</tr>{% for security in securities %}<tr><td>{{ security.ticker }}</td><td>{{ security.name }}</td><td>{{ security.share_class|default:"—" }}</td><td>{{ security.isin|default:"—" }}</td>{% if membership.role != 'viewer' %}<td><a href="{% url 'edit_security' security.id %}?next={{ request.get_full_path|urlencode }}">Edit</a> · <a href="{% url 'delete_security' security.id %}?next={{ request.get_full_path|urlencode }}">Delete</a></td>{% endif %}</tr>{% empty %}<tr><td colspan="5">No securities recorded.</td></tr>{% endfor %}</table></div>
+{% endblock %}

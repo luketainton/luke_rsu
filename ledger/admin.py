@@ -5,6 +5,7 @@ from .models import (
     FxRate,
     Grant,
     Sale,
+    Security,
     StockPrice,
     User,
     Vest,
@@ -13,5 +14,5 @@ from .models import (
 )
 
 admin.site.register(
-    [User, Workspace, WorkspaceMembership, Broker, Grant, Vest, Sale, FxRate, StockPrice]
+    [User, Workspace, WorkspaceMembership, Broker, Security, Grant, Vest, Sale, FxRate, StockPrice]
 )

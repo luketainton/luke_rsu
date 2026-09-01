@@ -38,6 +38,11 @@ urlpatterns = [
     path("prices/add/", views.add_price, name="add_price"),
     path("prices/<int:price_id>/edit/", views.edit_price, name="edit_price"),
     path("prices/<int:price_id>/delete/", views.delete_price, name="delete_price"),
+    path("securities/", views.security_list, name="security_list"),
+    path("securities/add/", views.add_security, name="add_security"),
+    path("securities/<int:security_id>/edit/", views.edit_security, name="edit_security"),
+    path("securities/<int:security_id>/delete/", views.delete_security, name="delete_security"),
+    path("section-104/", views.section_104_working_paper, name="section_104_working_paper"),
     path("access/", views.access_management, name="access_management"),
 ]
 if settings.SCIM_ENABLED:

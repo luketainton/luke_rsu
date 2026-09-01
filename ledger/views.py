@@ -20,6 +20,7 @@ from .forms import (
     HmrcRateFetchForm,
     MembershipForm,
     SaleForm,
+    SecurityForm,
     StockPriceForm,
     VestForm,
     WiseRateFetchForm,
@@ -27,7 +28,8 @@ from .forms import (
 from .fx import EventRateUnavailable, ensure_event_rate
 from .hmrc import HmrcRateUnavailable, fetch_usd_rate
 from .importers import UnsupportedImport, import_etrade_benefit_history
-from .models import Broker, FxRate, Grant, Sale, StockPrice, Vest, WorkspaceMembership
+from .models import Broker, FxRate, Grant, Sale, Security, StockPrice, Vest, WorkspaceMembership
+from .section104 import section_104_report
 from .wise import WiseRateUnavailable
 from .wise import fetch_usd_rate as fetch_wise_usd_rate
 
@@ -282,6 +284,96 @@ def price_list(request):
             "sort_options": sort_options,
             "live_price_configured": is_configured(),
             "live_price_errors": live_price_errors,
+        },
+    )
+
+
+@login_required
+def security_list(request):
+    member = private_membership(request.user)
+    securities = Security.objects.filter(workspace=member.workspace)
+    return render(
+        request, "ledger/securities.html", {"membership": member, "securities": securities}
+    )
+
+
+@login_required
+def add_security(request):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    form = SecurityForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        security = form.save(commit=False)
+        security.workspace = member.workspace
+        security.save()
+        messages.success(request, "Security saved.")
+        return redirect(return_url(request, "security_list"))
+    return render(
+        request,
+        "ledger/form.html",
+        {"form": form, "title": "Security", "next": return_url(request, "security_list")},
+    )
+
+
+@login_required
+def edit_security(request, security_id):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    security = get_object_or_404(Security, id=security_id, workspace=member.workspace)
+    form = SecurityForm(request.POST or None, instance=security)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Security updated.")
+        return redirect(return_url(request, "security_list"))
+    return render(
+        request,
+        "ledger/form.html",
+        {"form": form, "title": "Security", "next": return_url(request, "security_list")},
+    )
+
+
+@login_required
+def delete_security(request, security_id):
+    member = private_membership(request.user)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    security = get_object_or_404(Security, id=security_id, workspace=member.workspace)
+    if request.method == "POST":
+        security.delete()
+        messages.success(
+            request, "Security deleted. Linked Grants need relinking for Section 104 reporting."
+        )
+        return redirect(return_url(request, "security_list"))
+    return render(
+        request,
+        "ledger/confirm_delete_security.html",
+        {"security": security, "next": return_url(request, "security_list")},
+    )
+
+
+@login_required
+def section_104_working_paper(request):
+    member = private_membership(request.user)
+    security_id = request.GET.get("security")
+    securities = Security.objects.filter(workspace=member.workspace)
+    if security_id:
+        securities = securities.filter(id=security_id)
+    grants = list(
+        Grant.objects.filter(workspace=member.workspace).select_related("security", "broker")
+    )
+    vests = list(Vest.objects.filter(workspace=member.workspace).select_related("broker"))
+    sales = list(Sale.objects.filter(workspace=member.workspace).select_related("broker"))
+    reports = [section_104_report(security, grants, vests, sales) for security in securities]
+    return render(
+        request,
+        "ledger/section_104.html",
+        {
+            "membership": member,
+            "reports": reports,
+            "securities": Security.objects.filter(workspace=member.workspace),
+            "selected_security": security_id,
         },
     )
 

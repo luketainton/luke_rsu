@@ -17,6 +17,7 @@ from .finnhub import refresh_live_price
 from .hmrc import HmrcRate
 from .models import Broker, FxRate, Grant, Sale, StockPrice, Vest
 from .scim import ScimBearerAuthMiddleware
+from .section104 import section_104_report
 
 
 class SsoLoginTests(TestCase):
@@ -368,6 +369,66 @@ class WorkspaceIsolationTests(TestCase):
         self.assertContains(response, "Market position")
         self.assertContains(response, "MSFT")
         self.assertContains(response, "$1200.00")
+
+    def test_section_104_matches_30_day_acquisitions_then_the_pool(self):
+        from .models import Security
+
+        workspace = self.bob.workspace_memberships.get().workspace
+        broker = Broker.objects.create(workspace=workspace, name="Charles Schwab")
+        security = Security.objects.create(workspace=workspace, name="Microsoft", ticker="MSFT")
+        FxRate.objects.create(
+            workspace=workspace,
+            label="2026 test rate",
+            method="manual",
+            starts_on=date(2026, 1, 1),
+            ends_on=date(2026, 12, 31),
+            usd_per_gbp=Decimal("1.25"),
+            source_url="https://example.test/rate",
+        )
+        grant = Grant.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-2026",
+            ticker="MSFT",
+            security=security,
+            date=date(2026, 5, 1),
+            units=10,
+        )
+        pool_vest = Vest.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-2026",
+            date=date(2026, 5, 1),
+            units=10,
+            usd_price=100,
+        )
+        sale = Sale.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-2026",
+            date=date(2026, 6, 1),
+            units=8,
+            usd_price=150,
+        )
+        future_vest = Vest.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-2026",
+            date=date(2026, 6, 10),
+            units=3,
+            usd_price=120,
+        )
+        report = section_104_report(security, [grant], [pool_vest, future_vest], [sale])
+        matches = report.disposals[0].matches
+        self.assertEqual(
+            [(match.kind, match.units) for match in matches],
+            [("30-day", Decimal(3)), ("Section 104 pool", Decimal(5))],
+        )
+        self.assertEqual(report.pool_units, Decimal(5))
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("section_104_working_paper"))
+        self.assertContains(response, "Section 104 pool")
+        self.assertContains(response, "30-day")
 
     def test_hmrc_financial_year_uses_5_april_boundary(self):
         workspace = self.bob.workspace_memberships.get().workspace
