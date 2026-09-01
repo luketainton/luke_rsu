@@ -2,7 +2,41 @@ import hmac
 import os
 
 from django.http import HttpResponse
-from django_scim.adapters import SCIMGroup
+from django_scim.adapters import SCIMGroup, SCIMUser
+
+
+class DjangoUserAdapter(SCIMUser):
+    """Map SCIM's name fields explicitly onto Django's user name fields."""
+
+    def _apply_name(self, name):
+        name = name or {}
+        first_name = name.get("givenName")
+        last_name = name.get("familyName")
+        if first_name is None and last_name is None and name.get("formatted"):
+            parts = name["formatted"].strip().split(None, 1)
+            first_name = parts[0] if parts else ""
+            last_name = parts[1] if len(parts) > 1 else ""
+        self.obj.first_name = (first_name or "").strip()
+        self.obj.last_name = (last_name or "").strip()
+
+    def from_dict(self, data):
+        super().from_dict(data)
+        self._apply_name(data.get("name"))
+
+    def handle_replace(self, path, value, operation):
+        if path.first_path == ("name", None, None) and isinstance(value, dict):
+            self._apply_name(value)
+            self.save()
+            return
+        if path.first_path == ("name", "givenName", None):
+            self.obj.first_name = (value or "").strip()
+            self.save()
+            return
+        if path.first_path == ("name", "familyName", None):
+            self.obj.last_name = (value or "").strip()
+            self.save()
+            return
+        super().handle_replace(path, value, operation)
 
 
 class DjangoGroupAdapter(SCIMGroup):

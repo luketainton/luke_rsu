@@ -1,4 +1,4 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="card"><h1>Delete stock price?</h1><p>This permanently removes the {{ price.ticker }} price for {{ price.price_date }}.</p><form method="post" class="inline-form">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}"><button class="danger" type="submit">Delete stock price</button></form> <a href="{{ next }}">Cancel</a></section>
+<section class="card"><h1>Delete stock price?</h1><p>This permanently removes the {{ price.security }} price for {{ price.price_date }}.</p><form method="post" class="inline-form">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}"><button class="danger" type="submit">Delete stock price</button></form> <a href="{{ next }}">Cancel</a></section>
 {% endblock %}

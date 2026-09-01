@@ -146,9 +146,9 @@ def ticker_positions(grants, vests, sales, prices):
     tickers_by_grant = {}
     tickers_by_grant_id = defaultdict(set)
     for grant in grants:
-        if grant.ticker and grant.grant_id:
-            tickers_by_grant[(grant.broker_id, grant.grant_id)] = grant.ticker
-            tickers_by_grant_id[grant.grant_id].add(grant.ticker)
+        if grant.security and grant.grant_id:
+            tickers_by_grant[(grant.broker_id, grant.grant_id)] = grant.security.ticker
+            tickers_by_grant_id[grant.grant_id].add(grant.security.ticker)
 
     def ticker_for(event):
         if ticker := tickers_by_grant.get((event.broker_id, event.grant_id)):
@@ -180,7 +180,7 @@ def ticker_positions(grants, vests, sales, prices):
 
     latest_prices = {}
     for price in sorted(prices, key=lambda item: (item.price_date, item.id)):
-        latest_prices[price.ticker] = price
+        latest_prices[price.security.ticker] = price
     for ticker, position in positions.items():
         if price := latest_prices.get(ticker):
             position.latest_price = price.usd_price

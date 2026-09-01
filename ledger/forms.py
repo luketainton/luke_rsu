@@ -36,11 +36,7 @@ class GrantForm(RecordBaseForm):
 
     class Meta(RecordBaseForm.Meta):
         model = Grant
-        fields = ["broker", "grant_id", "security", "ticker", "date", "units", "usd_price", "notes"]
-
-    def clean_ticker(self):
-        security = self.cleaned_data.get("security")
-        return security.ticker if security else self.cleaned_data["ticker"].strip().upper()
+        fields = ["broker", "grant_id", "security", "date", "units", "usd_price", "notes"]
 
 
 class SecurityForm(forms.ModelForm):
@@ -119,12 +115,14 @@ class FxRateForm(forms.ModelForm):
 class StockPriceForm(forms.ModelForm):
     source_url = forms.URLField(required=False, assume_scheme="https")
 
-    def clean_ticker(self):
-        return self.cleaned_data["ticker"].strip().upper()
+    def __init__(self, *args, workspace, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["security"].queryset = Security.objects.filter(workspace=workspace)
+        self.fields["security"].empty_label = "No security selected"
 
     class Meta:
         model = StockPrice
-        fields = ["ticker", "price_date", "usd_price", "source_url", "notes"]
+        fields = ["security", "price_date", "usd_price", "source_url", "notes"]
         widgets = {
             "price_date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 2}),

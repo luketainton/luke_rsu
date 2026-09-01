@@ -14,7 +14,7 @@ from urllib.request import urlopen
 from django.conf import settings
 from django.utils import timezone
 
-from .models import StockPrice
+from .models import Security, StockPrice
 
 FINNHUB_QUOTE_URL = "https://finnhub.io/api/v1/quote"
 
@@ -66,7 +66,7 @@ def refresh_live_price(workspace, ticker, now=None):
     """Return a cached quote unless it is older than the configured refresh interval."""
     now = now or timezone.now()
     latest = (
-        StockPrice.objects.filter(workspace=workspace, ticker=ticker, source="finnhub")
+        StockPrice.objects.filter(workspace=workspace, security__ticker=ticker, source="finnhub")
         .order_by("-fetched_at", "-id")
         .first()
     )
@@ -77,9 +77,10 @@ def refresh_live_price(workspace, ticker, now=None):
     ):
         return latest, False
     quote = fetch_quote(ticker)
+    security = Security.objects.get(workspace=workspace, ticker=ticker)
     price, _ = StockPrice.objects.update_or_create(
         workspace=workspace,
-        ticker=ticker,
+        security=security,
         price_date=quote.quoted_at.date(),
         source="finnhub",
         defaults={

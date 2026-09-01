@@ -16,7 +16,17 @@ from openpyxl import Workbook
 from .dashboard_data import dashboard_summary, ticker_positions
 from .finnhub import refresh_live_price
 from .hmrc import HmrcRate
-from .models import Broker, FxRate, Grant, Sale, StockPrice, Vest, Workspace, WorkspaceMembership
+from .models import (
+    Broker,
+    FxRate,
+    Grant,
+    Sale,
+    Security,
+    StockPrice,
+    Vest,
+    Workspace,
+    WorkspaceMembership,
+)
 from .scim import ScimBearerAuthMiddleware
 from .section104 import section_104_report
 
@@ -94,6 +104,24 @@ class WorkspaceIsolationTests(TestCase):
         membership = WorkspaceMembership.objects.get(workspace=workspace, user=self.bob)
         self.assertEqual(membership.role, WorkspaceMembership.Role.OWNER)
         self.assertEqual(self.client.session["active_workspace_id"], workspace.id)
+
+    def test_owner_can_rename_active_ledger(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        self.client.force_login(self.bob)
+        response = self.client.post(reverse("rename_workspace"), {"name": "Personal RSUs"})
+        self.assertRedirects(response, reverse("dashboard"))
+        workspace.refresh_from_db()
+        self.assertEqual(workspace.name, "Personal RSUs")
+
+    def test_non_owner_cannot_rename_active_ledger(self):
+        member = self.bob.workspace_memberships.get()
+        member.role = WorkspaceMembership.Role.EDITOR
+        member.save(update_fields=["role"])
+        self.client.force_login(self.bob)
+        response = self.client.post(reverse("rename_workspace"), {"name": "Not allowed"})
+        self.assertEqual(response.status_code, 403)
+        member.workspace.refresh_from_db()
+        self.assertNotEqual(member.workspace.name, "Not allowed")
 
     def test_account_area_uses_name_then_email_fallback(self):
         self.alice.first_name = "Alice"
@@ -211,6 +239,9 @@ class WorkspaceIsolationTests(TestCase):
 
     def test_owner_can_invite_existing_user_as_viewer(self):
         self.client.force_login(self.alice)
+        self.assertNotContains(
+            self.client.get(reverse("dashboard")), 'data-tooltip="Manage user access"'
+        )
         response = self.client.post(
             reverse("access_management"), {"email": self.bob.email, "role": "viewer"}
         )
@@ -218,6 +249,37 @@ class WorkspaceIsolationTests(TestCase):
         self.assertEqual(
             self.alice_workspace.memberships.get(user=self.bob).role,
             "viewer",
+        )
+
+    def test_owner_can_remove_existing_user_access(self):
+        membership = WorkspaceMembership.objects.create(
+            workspace=self.alice_workspace, user=self.bob, role=WorkspaceMembership.Role.VIEWER
+        )
+        self.client.force_login(self.alice)
+        response = self.client.post(reverse("remove_workspace_access", args=[membership.id]))
+        self.assertRedirects(response, reverse("access_management"))
+        self.assertFalse(WorkspaceMembership.objects.filter(id=membership.id).exists())
+
+    def test_non_owner_cannot_remove_user_access(self):
+        membership = WorkspaceMembership.objects.create(
+            workspace=self.alice_workspace, user=self.bob, role=WorkspaceMembership.Role.EDITOR
+        )
+        self.client.force_login(self.bob)
+        response = self.client.post(reverse("remove_workspace_access", args=[membership.id]))
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(WorkspaceMembership.objects.filter(id=membership.id).exists())
+
+    def test_last_owner_cannot_be_removed(self):
+        self.client.force_login(self.alice)
+        response = self.client.post(
+            reverse(
+                "remove_workspace_access",
+                args=[self.alice.workspace_memberships.get().id],
+            )
+        )
+        self.assertRedirects(response, reverse("access_management"))
+        self.assertTrue(
+            self.alice.workspace_memberships.filter(workspace=self.alice_workspace).exists()
         )
 
     def test_grant_list_displays_workspace_grants_and_navigation(self):
@@ -370,11 +432,12 @@ class WorkspaceIsolationTests(TestCase):
     def test_dashboard_shows_ticker_level_market_position(self):
         workspace = self.bob.workspace_memberships.get().workspace
         broker = Broker.objects.create(workspace=workspace, name="Charles Schwab")
+        security = Security.objects.create(workspace=workspace, name="Microsoft", ticker="MSFT")
         grant = Grant.objects.create(
             workspace=workspace,
             broker=broker,
             grant_id="MSFT-2026",
-            ticker="MSFT",
+            security=security,
             date=date(2026, 5, 1),
             units=10,
         )
@@ -396,7 +459,7 @@ class WorkspaceIsolationTests(TestCase):
         )
         price = StockPrice.objects.create(
             workspace=workspace,
-            ticker="MSFT",
+            security=security,
             price_date=date(2026, 6, 2),
             usd_price=150,
         )
@@ -431,7 +494,6 @@ class WorkspaceIsolationTests(TestCase):
             workspace=workspace,
             broker=broker,
             grant_id="MSFT-2026",
-            ticker="MSFT",
             security=security,
             date=date(2026, 5, 1),
             units=10,
@@ -552,15 +614,19 @@ class WorkspaceIsolationTests(TestCase):
 
     def test_tickers_and_stock_prices_are_workspace_scoped(self):
         workspace = self.bob.workspace_memberships.get().workspace
+        security = Security.objects.create(workspace=workspace, name="Microsoft", ticker="MSFT")
+        other_security = Security.objects.create(
+            workspace=self.alice_workspace, name="Apple", ticker="AAPL"
+        )
         grant = Grant.objects.create(
             workspace=workspace,
             date=date(2026, 3, 1),
             units=20,
-            ticker="MSFT",
+            security=security,
         )
         other_price = StockPrice.objects.create(
             workspace=self.alice_workspace,
-            ticker="AAPL",
+            security=other_security,
             price_date=date(2026, 3, 1),
             usd_price=200,
         )
@@ -568,7 +634,7 @@ class WorkspaceIsolationTests(TestCase):
         response = self.client.post(
             reverse("add_price"),
             {
-                "ticker": " msft ",
+                "security": security.id,
                 "price_date": "2026-03-02",
                 "usd_price": "420.50",
                 "source_url": "example.test/quote",
@@ -577,12 +643,12 @@ class WorkspaceIsolationTests(TestCase):
         )
         self.assertRedirects(response, reverse("price_list"))
         price = StockPrice.objects.get(workspace=workspace)
-        self.assertEqual(price.ticker, "MSFT")
+        self.assertEqual(price.security, security)
         self.assertEqual(price.source_url, "https://example.test/quote")
         response = self.client.get(reverse("price_list"))
         self.assertContains(response, "MSFT")
         self.assertNotContains(response, "AAPL")
-        self.assertContains(self.client.get(reverse("grant_list")), grant.ticker)
+        self.assertContains(self.client.get(reverse("grant_list")), grant.security.ticker)
         self.assertEqual(
             self.client.get(reverse("edit_price", args=[other_price.id])).status_code, 404
         )
@@ -590,6 +656,7 @@ class WorkspaceIsolationTests(TestCase):
     @override_settings(STOCK_PRICE_REFRESH_MINUTES=15)
     def test_live_stock_price_uses_a_per_workspace_fifteen_minute_cache(self):
         workspace = self.bob.workspace_memberships.get().workspace
+        Security.objects.create(workspace=workspace, name="Microsoft", ticker="MSFT")
         now = datetime(2026, 3, 2, 12, tzinfo=UTC)
         payload = json.dumps({"c": 420.5, "t": int(now.timestamp())}).encode()
         with (
@@ -1167,6 +1234,8 @@ class ScimTokenTests(TestCase):
         self.assertEqual(response.status_code, 201)
         user = get_user_model().objects.get(email="provisioned@example.test")
         self.assertEqual(user.scim_username, "provisioned@example.test")
+        self.assertEqual(user.first_name, "Provisioned")
+        self.assertEqual(user.last_name, "User")
         self.assertIsNotNone(user.scim_id)
 
     def test_groups_endpoint_lists_django_groups(self):

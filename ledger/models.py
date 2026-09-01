@@ -120,7 +120,6 @@ class WorkspaceRecord(models.Model):
 
 
 class Grant(WorkspaceRecord):
-    ticker = models.CharField(max_length=20, blank=True)
     security = models.ForeignKey(Security, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
@@ -184,7 +183,7 @@ class StockPrice(models.Model):
     """A dated USD share price kept separately for each private workspace."""
 
     workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="stock_prices")
-    ticker = models.CharField(max_length=20)
+    security = models.ForeignKey(Security, on_delete=models.CASCADE, related_name="stock_prices")
     price_date = models.DateField()
     usd_price = models.DecimalField(max_digits=16, decimal_places=6)
     source = models.CharField(
@@ -199,11 +198,11 @@ class StockPrice(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["workspace", "ticker", "price_date", "source"],
-                name="unique_workspace_ticker_price_date_source",
+                fields=["workspace", "security", "price_date", "source"],
+                name="unique_workspace_security_price_date_source",
             )
         ]
-        ordering = ["ticker", "-price_date"]
+        ordering = ["security__ticker", "-price_date"]
 
 
 @receiver(post_save, sender=User)

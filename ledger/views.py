@@ -119,14 +119,32 @@ def create_workspace(request):
 
 
 @login_required
+def rename_workspace(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    member = request_membership(request)
+    if member.role != WorkspaceMembership.Role.OWNER:
+        return HttpResponseForbidden("Owner permission required")
+    form = WorkspaceForm(request.POST, instance=member.workspace)
+    if form.is_valid():
+        form.save()
+        messages.success(request, "Ledger renamed.")
+    else:
+        messages.error(
+            request, "; ".join(error for errors in form.errors.values() for error in errors)
+        )
+    return redirect("dashboard")
+
+
+@login_required
 def dashboard(request):
     member = request_membership(request)
     workspace = member.workspace
-    grants = list(Grant.objects.filter(workspace=workspace).select_related("broker"))
+    grants = list(Grant.objects.filter(workspace=workspace).select_related("broker", "security"))
     vests = list(Vest.objects.filter(workspace=workspace).order_by("date", "id"))
     sales = list(Sale.objects.filter(workspace=workspace).order_by("date", "id"))
     live_price_errors = []
-    tracked_tickers = sorted({grant.ticker for grant in grants if grant.ticker})
+    tracked_tickers = sorted({grant.security.ticker for grant in grants if grant.security})
     if is_configured():
         for ticker in tracked_tickers:
             try:
@@ -212,12 +230,12 @@ def grant_list(request):
             ("-date", "Newest first"),
             ("date", "Oldest first"),
             ("grant_id", "Grant ID"),
-            ("ticker", "Ticker"),
+            ("security__ticker", "Ticker"),
             ("broker__name", "Broker"),
             ("-units", "Most units"),
         ],
         "-date",
-        ["grant_id", "ticker", "broker__name", "notes"],
+        ["grant_id", "security__ticker", "broker__name", "notes"],
     )
 
 
@@ -291,10 +309,9 @@ def price_list(request):
     member = request_membership(request)
     live_price_errors = []
     tracked_tickers = (
-        Grant.objects.filter(workspace=member.workspace)
-        .exclude(ticker="")
-        .order_by("ticker")
-        .values_list("ticker", flat=True)
+        Grant.objects.filter(workspace=member.workspace, security__isnull=False)
+        .order_by("security__ticker")
+        .values_list("security__ticker", flat=True)
         .distinct()
     )
     if is_configured():
@@ -306,13 +323,13 @@ def price_list(request):
     sort_options = [
         ("-price_date", "Latest first"),
         ("price_date", "Oldest first"),
-        ("ticker", "Ticker"),
+        ("security__ticker", "Ticker"),
         ("-usd_price", "Highest price"),
     ]
     prices, search, sort = filtered_table(
         request,
         StockPrice.objects.filter(workspace=member.workspace),
-        ["ticker", "notes"],
+        ["security__ticker", "notes"],
         sort_options,
         "-price_date",
     )
@@ -502,7 +519,7 @@ def add_price(request):
     member = request_membership(request)
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
-    form = StockPriceForm(request.POST or None)
+    form = StockPriceForm(request.POST or None, workspace=member.workspace)
     if request.method == "POST" and form.is_valid():
         price = form.save(commit=False)
         price.workspace = member.workspace
@@ -522,7 +539,7 @@ def edit_price(request, price_id):
     if not can_edit(member):
         return HttpResponseForbidden("Editor permission required")
     price = get_object_or_404(StockPrice, id=price_id, workspace=member.workspace)
-    form = StockPriceForm(request.POST or None, instance=price)
+    form = StockPriceForm(request.POST or None, instance=price, workspace=member.workspace)
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "Stock price updated.")
@@ -857,3 +874,26 @@ def access_management(request):
             "members": member.workspace.memberships.select_related("user").order_by("user__email"),
         },
     )
+
+
+@login_required
+def remove_workspace_access(request, membership_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    member = request_membership(request)
+    if member.role != "owner":
+        return HttpResponseForbidden("Owner permission required")
+    target = get_object_or_404(WorkspaceMembership, id=membership_id, workspace=member.workspace)
+    if target.user_id == request.user.id:
+        messages.error(request, "The active owner cannot remove their own access.")
+    elif (
+        target.role == WorkspaceMembership.Role.OWNER
+        and not member.workspace.memberships.filter(role=WorkspaceMembership.Role.OWNER)
+        .exclude(id=target.id)
+        .exists()
+    ):
+        messages.error(request, "A ledger must retain at least one owner.")
+    else:
+        target.delete()
+        messages.success(request, "Ledger access removed.")
+    return redirect("access_management")

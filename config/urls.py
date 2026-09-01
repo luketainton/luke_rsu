@@ -12,6 +12,7 @@ urlpatterns = [
     path("logout/", views.logout_view, name="logout"),
     path("ledgers/switch/", views.switch_workspace, name="switch_workspace"),
     path("ledgers/create/", views.create_workspace, name="create_workspace"),
+    path("ledgers/rename/", views.rename_workspace, name="rename_workspace"),
     path("grants/", views.grant_list, name="grant_list"),
     path("grants/add/", views.add_grant, name="add_grant"),
     path("grants/<int:grant_id>/edit/", views.edit_grant, name="edit_grant"),
@@ -46,6 +47,11 @@ urlpatterns = [
     path("securities/<int:security_id>/delete/", views.delete_security, name="delete_security"),
     path("section-104/", views.section_104_working_paper, name="section_104_working_paper"),
     path("access/", views.access_management, name="access_management"),
+    path(
+        "access/<int:membership_id>/remove/",
+        views.remove_workspace_access,
+        name="remove_workspace_access",
+    ),
 ]
 if settings.SCIM_ENABLED:
     urlpatterns.append(path("scim/v2/", include(("django_scim.urls", "scim"), namespace="scim")))
