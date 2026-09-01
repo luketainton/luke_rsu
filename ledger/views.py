@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from .dashboard_data import dashboard_summary, ticker_positions
 from .finnhub import FinnhubQuoteUnavailable, is_configured, refresh_live_price
 from .forms import (
     BenefitHistoryImportForm,
@@ -76,18 +77,43 @@ def logout_view(request):
 def dashboard(request):
     member = private_membership(request.user)
     workspace = member.workspace
-    vests = Vest.objects.filter(workspace=workspace)
-    sales = Sale.objects.filter(workspace=workspace)
+    grants = list(Grant.objects.filter(workspace=workspace).select_related("broker"))
+    vests = list(Vest.objects.filter(workspace=workspace).order_by("date", "id"))
+    sales = list(Sale.objects.filter(workspace=workspace).order_by("date", "id"))
+    live_price_errors = []
+    tracked_tickers = sorted({grant.ticker for grant in grants if grant.ticker})
+    if is_configured():
+        for ticker in tracked_tickers:
+            try:
+                refresh_live_price(workspace, ticker)
+            except FinnhubQuoteUnavailable as exc:
+                live_price_errors.append(str(exc))
+    positions = ticker_positions(
+        grants,
+        vests,
+        sales,
+        StockPrice.objects.filter(workspace=workspace),
+    )
+    summary = dashboard_summary(vests, sales)
     context = {
         "membership": member,
-        "grant_count": Grant.objects.filter(workspace=workspace).count(),
-        "vest_count": vests.count(),
-        "sale_count": sales.count(),
+        "grant_count": len(grants),
+        "vest_count": len(vests),
+        "sale_count": len(sales),
         "rate_count": FxRate.objects.filter(workspace=workspace).count(),
+        "pool_cost": summary["pool_cost"],
+        "tax_years": summary["tax_years"],
+        "incomplete_sales": summary["incomplete_sales"],
+        "ticker_positions": positions,
+        "market_value_usd": sum(
+            (position.market_value for position in positions if position.market_value is not None),
+            Decimal(0),
+        ),
+        "unpriced_ticker_count": sum(position.latest_price is None for position in positions),
+        "live_price_configured": is_configured(),
+        "live_price_errors": live_price_errors,
     }
-    context["held"] = sum((v.units - v.withheld_units for v in vests), Decimal()) - sum(
-        (s.units for s in sales), Decimal()
-    )
+    context["held"] = summary["held_units"]
     return render(request, "ledger/dashboard.html", context)
 
 

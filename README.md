@@ -72,10 +72,11 @@ Run quality checks with `uv run ruff check .`, `uv run python manage.py check`, 
 
 ## Tax scope
 
-This is a record-keeping aid, not tax advice or a completed Self Assessment return. Retain employer/broker documents and the FX source for every event. The current UI is deliberately conservative: it records the values needed to prepare a CGT working file rather than presenting a final tax liability.
+This is a record-keeping aid, not tax advice or a completed Self Assessment return. Retain employer/broker documents and the FX source for every event. The Overview dashboard's gain/loss and CGT figures are estimates only: it uses a chronological average-cost pool of net vested shares and does not apply same-day or 30-day share matching, losses brought forward, or the user's taxable-income position. Confirm the final calculation before filing.
 
 Useful references:
 
 - [HMRC HS305: employment-related securities](https://www.gov.uk/government/publications/employee-shares-and-securities-further-guidance-hs305-self-assessment-helpsheet/hs305-employment-related-shares-and-securities-further-guidance-2026)
 - [HMRC CGT foreign currency guidance](https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg78310)
 - [HMRC share identification guidance](https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg51550)
+- [HMRC CGT rates and annual exempt amount](https://www.gov.uk/guidance/capital-gains-tax-rates-and-allowances)

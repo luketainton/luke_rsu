@@ -1,23 +1,49 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Your private RSU ledger</h1>
-<p class="muted">{{ membership.workspace.name }} · {{ membership.get_role_display }}</p>
-<section class="summary-grid">
-  <div class="card"><span class="muted">Current holding</span><p class="summary-value">{{ held }}</p><span class="muted">shares</span></div>
-  <div class="card"><span class="muted">Grants</span><p class="summary-value">{{ grant_count }}</p><a href="{% url 'grant_list' %}">View grants</a></div>
-  <div class="card"><span class="muted">Vests</span><p class="summary-value">{{ vest_count }}</p><a href="{% url 'vest_list' %}">View vests</a></div>
-  <div class="card"><span class="muted">Sales</span><p class="summary-value">{{ sale_count }}</p><a href="{% url 'sale_list' %}">View sales</a></div>
-</section>
-<section class="card">
-  <h2>Quick actions</h2>
-  <div class="actions">
+<header class="page-heading">
+  <div><h1>Your private RSU ledger</h1><p class="muted">{{ membership.workspace.name }} · {{ membership.get_role_display }}</p></div>
+  <div class="actions quick-actions" aria-label="Quick actions">
     {% if membership.role != 'viewer' %}
       <a href="{% url 'add_grant' %}"><button>Add grant</button></a>
       <a href="{% url 'add_vest' %}"><button>Add vest</button></a>
       <a href="{% url 'add_sale' %}"><button>Add sale</button></a>
-      <a href="{% url 'import_etrade_history' %}"><button class="secondary">Import E*TRADE history</button></a>
+      <a href="{% url 'import_etrade_history' %}"><button class="secondary">Import history</button></a>
     {% endif %}
-    <a href="{% url 'rate_list' %}">Manage {{ rate_count }} exchange rate{{ rate_count|pluralize }}</a>
   </div>
+</header>
+<section class="summary-grid">
+  <div class="card"><span class="muted">Current holding</span><p class="summary-value">{{ held }}</p><span class="muted">shares</span></div>
+  <div class="card"><span class="muted">Estimated pooled cost</span><p class="summary-value">£{{ pool_cost|floatformat:2 }}</p><span class="muted">net vested shares</span></div>
+  <div class="card"><span class="muted">Quoted market value</span><p class="summary-value">${{ market_value_usd|floatformat:2 }}</p><span class="muted">USD · priced tickers only</span></div>
+  <div class="card"><span class="muted">Grants</span><p class="summary-value">{{ grant_count }}</p><a href="{% url 'grant_list' %}">View grants</a></div>
+  <div class="card"><span class="muted">Vests</span><p class="summary-value">{{ vest_count }}</p><a href="{% url 'vest_list' %}">View vests</a></div>
+  <div class="card"><span class="muted">Sales</span><p class="summary-value">{{ sale_count }}</p><a href="{% url 'sale_list' %}">View sales</a></div>
+  <div class="card"><span class="muted">Exchange rates</span><p class="summary-value">{{ rate_count }}</p><a href="{% url 'rate_list' %}">Manage rates</a></div>
+</section>
+<section class="card dashboard-card">
+  <div class="section-heading"><div><h2>Market position</h2><p class="muted">Latest saved USD price for holdings linked to a ticker on their Grant.</p></div><a href="{% url 'price_list' %}">Manage stock prices</a></div>
+  {% if ticker_positions %}
+  <div class="table-scroll"><table><tr><th>Ticker</th><th>Shares held</th><th>Latest USD price</th><th>Price date</th><th>Market value</th><th>Estimated USD cost</th><th>Unrealised gain / loss</th></tr>
+  {% for position in ticker_positions %}<tr><td>{{ position.ticker }}</td><td>{{ position.units }}</td><td>{% if position.latest_price is not None %}${{ position.latest_price|floatformat:2 }}{% else %}—{% endif %}</td><td>{{ position.price_date|default:"—" }}</td><td>{% if position.market_value is not None %}${{ position.market_value|floatformat:2 }}{% else %}—{% endif %}</td><td>{% if position.cost_is_complete %}${{ position.usd_cost|floatformat:2 }}{% else %}—{% endif %}</td><td class="{% if position.unrealised_gain_or_loss is not None and position.unrealised_gain_or_loss < 0 %}loss{% else %}gain{% endif %}">{% if position.unrealised_gain_or_loss is not None %}${{ position.unrealised_gain_or_loss|floatformat:2 }}{% else %}—{% endif %}</td></tr>{% endfor %}</table></div>
+  {% else %}<p class="muted">Add a ticker to a Grant, then record vests linked to that Grant ID to view a market position.</p>{% endif %}
+  {% if unpriced_ticker_count %}<p class="message">{{ unpriced_ticker_count }} tracked ticker{{ unpriced_ticker_count|pluralize }} has no saved price yet.</p>{% endif %}
+  {% if live_price_configured %}<p class="muted small-print">Finnhub quotes refresh when the dashboard is opened, no more often than the configured interval.</p>{% endif %}
+  {% for error in live_price_errors %}<p class="message">{{ error }}</p>{% endfor %}
+</section>
+<section class="card dashboard-card">
+  <div class="section-heading"><div><h2>Realised performance and estimated CGT</h2><p class="muted">Disposals are grouped by UK financial year (6 April to 5 April).</p></div><a href="{% url 'sale_list' %}">View sales</a></div>
+  {% if tax_years %}
+  <div class="table-scroll"><table><tr><th>Financial year</th><th>Net vested</th><th>Sold</th><th>Sale proceeds</th><th>Estimated cost</th><th>Gain / loss</th><th>Taxable gain</th><th>Estimated CGT</th></tr>
+  {% for year in tax_years %}<tr>
+    <td>{{ year.label }}</td><td>{{ year.vested_units }}</td><td>{{ year.sold_units }}</td><td>£{{ year.proceeds|floatformat:2 }}</td><td>£{{ year.allowable_cost|floatformat:2 }}</td>
+    <td class="{% if year.gain_or_loss < 0 %}loss{% else %}gain{% endif %}">£{{ year.gain_or_loss|floatformat:2 }}</td><td>£{{ year.taxable_gain|floatformat:2 }}</td>
+    <td>£{{ year.lower_rate_cgt|floatformat:2 }}–£{{ year.higher_rate_cgt|floatformat:2 }}</td>
+  </tr>{% endfor %}</table></div>
+  <div class="performance-chart" aria-label="Estimated gain or loss by financial year">
+    {% for year in tax_years %}<div class="chart-row"><span>{{ year.label }}</span><div class="chart-track"><div class="chart-bar {% if year.gain_or_loss < 0 %}loss-bar{% else %}gain-bar{% endif %}" style="width:{{ year.chart_width }}%"></div></div><strong class="{% if year.gain_or_loss < 0 %}loss{% else %}gain{% endif %}">£{{ year.gain_or_loss|floatformat:0 }}</strong></div>{% endfor %}
+  </div>
+  {% else %}<p class="muted">Add vest and sale records with USD prices to begin estimating performance and CGT.</p>{% endif %}
+  {% if incomplete_sales %}<p class="message">{{ incomplete_sales }} sale{{ incomplete_sales|pluralize }} cannot yet be included in the estimate because a USD price/rate or sufficient vested shares are missing.</p>{% endif %}
+  <p class="muted small-print">Estimate only: uses a chronological average-cost pool of net vested shares, less recorded sale fees. It does not apply HMRC same-day or 30-day share matching, losses brought forward, or your taxable-income position. The range shows the main lower and higher CGT rates after the annual exempt amount (£{{ tax_years.0.annual_exempt_amount|floatformat:0 }} where applicable); confirm the final calculation before filing.</p>
 </section>
 {% endblock %}

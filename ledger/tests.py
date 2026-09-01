@@ -12,6 +12,7 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from openpyxl import Workbook
 
+from .dashboard_data import dashboard_summary, ticker_positions
 from .finnhub import refresh_live_price
 from .hmrc import HmrcRate
 from .models import Broker, FxRate, Grant, Sale, StockPrice, Vest
@@ -286,6 +287,87 @@ class WorkspaceIsolationTests(TestCase):
         response = self.client.get(reverse("grant_list"))
         self.assertContains(response, own_grant.notes)
         self.assertNotContains(response, "2026-01-01")
+
+    def test_dashboard_estimates_realised_gain_using_the_vested_share_pool(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        FxRate.objects.create(
+            workspace=workspace,
+            label="2026 test rate",
+            method="manual",
+            starts_on=date(2026, 1, 1),
+            ends_on=date(2026, 12, 31),
+            usd_per_gbp=Decimal("1.25"),
+            source_url="https://example.test/rate",
+        )
+        vest = Vest.objects.create(
+            workspace=workspace, date=date(2026, 5, 1), units=10, usd_price=100
+        )
+        sale = Sale.objects.create(
+            workspace=workspace,
+            date=date(2026, 6, 1),
+            units=5,
+            usd_price=120,
+            fees_gbp=1,
+        )
+
+        summary = dashboard_summary([vest], [sale])
+        year = summary["tax_years"][0]
+        self.assertEqual(summary["held_units"], Decimal(5))
+        self.assertEqual(summary["pool_cost"], Decimal(400))
+        self.assertEqual(year.label, "2026/27")
+        self.assertEqual(year.gain_or_loss, Decimal(79))
+        self.assertEqual(year.taxable_gain, Decimal(0))
+        self.assertEqual(year.higher_rate_cgt, Decimal(0))
+
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("dashboard"))
+        self.assertContains(response, "Realised performance and estimated CGT")
+        self.assertContains(response, "£79.00")
+
+    def test_dashboard_shows_ticker_level_market_position(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        broker = Broker.objects.create(workspace=workspace, name="Charles Schwab")
+        grant = Grant.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-2026",
+            ticker="MSFT",
+            date=date(2026, 5, 1),
+            units=10,
+        )
+        vest = Vest.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-2026",
+            date=date(2026, 5, 1),
+            units=10,
+            usd_price=100,
+        )
+        sale = Sale.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-2026",
+            date=date(2026, 6, 1),
+            units=2,
+            usd_price=120,
+        )
+        price = StockPrice.objects.create(
+            workspace=workspace,
+            ticker="MSFT",
+            price_date=date(2026, 6, 2),
+            usd_price=150,
+        )
+        position = ticker_positions([grant], [vest], [sale], [price])[0]
+        self.assertEqual(position.units, Decimal(8))
+        self.assertEqual(position.usd_cost, Decimal(800))
+        self.assertEqual(position.market_value, Decimal(1200))
+        self.assertEqual(position.unrealised_gain_or_loss, Decimal(400))
+
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("dashboard"))
+        self.assertContains(response, "Market position")
+        self.assertContains(response, "MSFT")
+        self.assertContains(response, "$1200.00")
 
     def test_hmrc_financial_year_uses_5_april_boundary(self):
         workspace = self.bob.workspace_memberships.get().workspace
