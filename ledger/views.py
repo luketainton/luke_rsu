@@ -840,7 +840,7 @@ def delete_rate(request, rate_id):
     rate = get_object_or_404(FxRate, id=rate_id, workspace=member.workspace)
     if request.method == "POST":
         rate.delete()
-        messages.success(request, "HMRC rate deleted.")
+        messages.success(request, "Exchange rate deleted.")
         return redirect(return_url(request, "rate_list"))
     return render(
         request,
