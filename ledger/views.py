@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .dashboard_data import dashboard_summary, ticker_positions
-from .finnhub import FinnhubQuoteUnavailable, is_configured, refresh_live_price
+from .finnhub import is_configured
 from .forms import (
     BenefitHistoryImportForm,
     BrokerForm,
@@ -143,14 +143,6 @@ def dashboard(request):
     grants = list(Grant.objects.filter(workspace=workspace).select_related("broker", "security"))
     vests = list(Vest.objects.filter(workspace=workspace).order_by("date", "id"))
     sales = list(Sale.objects.filter(workspace=workspace).order_by("date", "id"))
-    live_price_errors = []
-    tracked_tickers = sorted({grant.security.ticker for grant in grants if grant.security})
-    if is_configured():
-        for ticker in tracked_tickers:
-            try:
-                refresh_live_price(workspace, ticker)
-            except FinnhubQuoteUnavailable as exc:
-                live_price_errors.append(str(exc))
     positions = ticker_positions(
         grants,
         vests,
@@ -174,7 +166,6 @@ def dashboard(request):
         ),
         "unpriced_ticker_count": sum(position.latest_price is None for position in positions),
         "live_price_configured": is_configured(),
-        "live_price_errors": live_price_errors,
     }
     context["held"] = summary["held_units"]
     return render(request, "ledger/dashboard.html", context)
@@ -307,19 +298,6 @@ def rate_list(request):
 @login_required
 def price_list(request):
     member = request_membership(request)
-    live_price_errors = []
-    tracked_tickers = (
-        Grant.objects.filter(workspace=member.workspace, security__isnull=False)
-        .order_by("security__ticker")
-        .values_list("security__ticker", flat=True)
-        .distinct()
-    )
-    if is_configured():
-        for ticker in tracked_tickers:
-            try:
-                refresh_live_price(member.workspace, ticker)
-            except FinnhubQuoteUnavailable as exc:
-                live_price_errors.append(str(exc))
     sort_options = [
         ("-price_date", "Latest first"),
         ("price_date", "Oldest first"),
@@ -343,7 +321,6 @@ def price_list(request):
             "sort": sort,
             "sort_options": sort_options,
             "live_price_configured": is_configured(),
-            "live_price_errors": live_price_errors,
         },
     )
 

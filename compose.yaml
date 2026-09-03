@@ -23,6 +23,21 @@ services:
       STOCK_PRICE_REFRESH_MINUTES: ${STOCK_PRICE_REFRESH_MINUTES:-15}
     ports:
       - "${PORT:-8000}:8000"
+  finnhub-poller:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["/bin/sh", "-c", "uv run python manage.py migrate --noinput && uv run python manage.py poll_finnhub"]
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: rsu
+      POSTGRES_USER: rsu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+      STOCK_PRICE_REFRESH_MINUTES: ${STOCK_PRICE_REFRESH_MINUTES:-15}
+      FINNHUB_POLL_INTERVAL_SECONDS: ${FINNHUB_POLL_INTERVAL_SECONDS:-60}
   db:
     image: postgres:18-alpine
     restart: unless-stopped

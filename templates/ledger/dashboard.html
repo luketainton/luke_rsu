@@ -27,8 +27,7 @@
   {% for position in ticker_positions %}<tr><td>{{ position.ticker }}</td><td>{{ position.units }}</td><td>{% if position.latest_price is not None %}${{ position.latest_price|floatformat:2 }}{% else %}—{% endif %}</td><td>{{ position.price_date|default:"—" }}</td><td>{% if position.market_value is not None %}${{ position.market_value|floatformat:2 }}{% else %}—{% endif %}</td><td>{% if position.cost_is_complete %}${{ position.usd_cost|floatformat:2 }}{% else %}—{% endif %}</td><td class="{% if position.unrealised_gain_or_loss is not None and position.unrealised_gain_or_loss < 0 %}loss{% else %}gain{% endif %}">{% if position.unrealised_gain_or_loss is not None %}${{ position.unrealised_gain_or_loss|floatformat:2 }}{% else %}—{% endif %}</td></tr>{% endfor %}</table></div>
   {% else %}<p class="muted">Link a Security to a Grant, then record vests linked to that Grant ID to view a market position.</p>{% endif %}
   {% if unpriced_ticker_count %}<p class="message">{{ unpriced_ticker_count }} tracked ticker{{ unpriced_ticker_count|pluralize }} has no saved price yet.</p>{% endif %}
-  {% if live_price_configured %}<p class="muted small-print">Finnhub quotes refresh when the dashboard is opened, no more often than the configured interval.</p>{% endif %}
-  {% for error in live_price_errors %}<p class="message">{{ error }}</p>{% endfor %}
+  {% if live_price_configured %}<p class="muted small-print">Finnhub quotes are refreshed by the background poller, no more often than the configured interval.</p>{% endif %}
 </section>
 <section class="card dashboard-card">
   <div class="section-heading"><div><h2>Realised performance and estimated CGT</h2><p class="muted">Disposals are grouped by UK financial year (6 April to 5 April).</p></div><a href="{% url 'sale_list' %}">View sales</a></div>

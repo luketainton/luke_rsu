@@ -2,8 +2,7 @@
 {% block content %}
 <div class="actions"><h1>Stock prices</h1>{% if membership.role != 'viewer' %}<a href="{% url 'add_price' %}?next={{ request.get_full_path|urlencode }}"><button>Add price</button></a>{% endif %}</div>
 <p class="muted">Record a dated USD price and its source for each security. Prices are kept private to this workspace.</p>
-{% if live_price_configured %}<p class="message">Tracked Grant securities refresh from Finnhub when this page is opened, no more often than the configured interval.</p>{% else %}<p class="muted">Set <code>FINNHUB_API_KEY</code> to retrieve live prices automatically.</p>{% endif %}
-{% for error in live_price_errors %}<p class="message">{{ error }}</p>{% endfor %}
+{% if live_price_configured %}<p class="message">Tracked Grant securities are refreshed by the background Finnhub poller, no more often than the configured interval.</p>{% else %}<p class="muted">Set <code>FINNHUB_API_KEY</code> to retrieve live prices automatically.</p>{% endif %}
 {% include "ledger/table_controls.html" %}
 <div class="table-scroll"><table><tr><th>Security</th><th>Date</th><th>USD price</th><th>Source</th><th>Retrieved</th><th>Notes</th>{% if membership.role != 'viewer' %}<th>Actions</th>{% endif %}</tr>
 {% for price in prices %}<tr><td>{{ price.security }}</td><td>{{ price.price_date }}</td><td>${{ price.usd_price }}</td><td>{{ price.get_source_display }}{% if price.source_url %} · <a href="{{ price.source_url }}" rel="noopener">Source</a>{% endif %}</td><td>{{ price.fetched_at|default:"—" }}</td><td>{{ price.notes|default:"—" }}</td>{% if membership.role != 'viewer' %}<td><a href="{% url 'edit_price' price.id %}?next={{ request.get_full_path|urlencode }}">Edit</a> · <a href="{% url 'delete_price' price.id %}?next={{ request.get_full_path|urlencode }}">Delete</a></td>{% endif %}</tr>

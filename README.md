@@ -38,8 +38,9 @@ timestamped source URL alongside the resulting rate.
 ## Optional Finnhub live stock prices
 
 Set `FINNHUB_API_KEY` to retrieve current USD quotes for the non-blank tickers on Grants. The
-Stock prices page refreshes a ticker only when its saved Finnhub quote is older than
-`STOCK_PRICE_REFRESH_MINUTES` (15 by default). The token is sent only to Finnhub; it is not
+Compose runs a dedicated background poller, and refreshes a ticker only when its saved Finnhub
+quote is older than `STOCK_PRICE_REFRESH_MINUTES` (15 by default). The poller checks every
+`FINNHUB_POLL_INTERVAL_SECONDS` (60 by default). The token is sent only to Finnhub; it is not
 stored in the database, included in source links, or exposed to the browser.
 
 ## SCIM provisioning
