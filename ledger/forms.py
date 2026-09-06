@@ -1,5 +1,6 @@
 from django import forms
 
+from .broker_rules import grants_for_event_broker
 from .importers import IMPORT_TYPE_CHOICES
 from .models import (
     Broker,
@@ -86,9 +87,10 @@ class BrokerGrantRecordForm(RecordBaseForm):
         broker_id = broker_id or self.initial.get("broker") or self.instance.broker_id
         grant_ids = []
         if broker_id:
-            grant_ids = Grant.objects.filter(workspace=workspace, broker_id=broker_id).exclude(
-                grant_id=""
-            )
+            broker = Broker.objects.filter(workspace=workspace, id=broker_id).first()
+            grant_ids = grants_for_event_broker(
+                Grant.objects.filter(workspace=workspace), broker
+            ).exclude(grant_id="")
             grant_ids = grant_ids.order_by("grant_id").values_list("grant_id", flat=True).distinct()
         self.fields["grant_id"] = forms.ChoiceField(
             choices=[("", "No Grant ID selected")]

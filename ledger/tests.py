@@ -30,7 +30,7 @@ from .models import (
     WorkspaceMembership,
 )
 from .scim import ScimBearerAuthMiddleware
-from .section104 import section_104_report
+from .section104 import event_security, section_104_report
 
 
 class SsoLoginTests(TestCase):
@@ -360,9 +360,30 @@ class WorkspaceIsolationTests(TestCase):
         response = self.client.get(reverse("broker_grant_ids", args=[broker.id]))
         self.assertEqual(response.json(), {"grant_ids": ["SCHWAB-2026"]})
 
+        response = self.client.get(reverse("broker_grant_ids", args=[other_broker.id]))
+        self.assertEqual(response.json(), {"grant_ids": ["ETRADE-2026", "SCHWAB-2026"]})
+
         response = self.client.post(
             reverse("add_sale"),
             {"broker": broker.id, "grant_id": "ETRADE-2026", "date": "2026-03-02", "units": "1"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select a valid choice")
+
+        response = self.client.post(
+            reverse("add_sale"),
+            {
+                "broker": other_broker.id,
+                "grant_id": "SCHWAB-2026",
+                "date": "2026-03-02",
+                "units": "1",
+            },
+        )
+        self.assertNotContains(response, "Select a valid choice")
+
+        response = self.client.post(
+            reverse("add_sale"),
+            {"broker": broker.id, "grant_id": "ETRADE-2026", "date": "2026-03-03", "units": "1"},
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Select a valid choice")
@@ -601,6 +622,55 @@ class WorkspaceIsolationTests(TestCase):
 
         self.assertEqual(vest.security, security)
         self.assertEqual(sale.security, security)
+
+    def test_schwab_grant_links_events_recorded_at_etrade(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        schwab = Broker.objects.create(workspace=workspace, name="Charles Schwab")
+        etrade = Broker.objects.create(workspace=workspace, name="MS E*TRADE")
+        security = Security.objects.create(workspace=workspace, name="Cisco", ticker="CSCO")
+        grant = Grant.objects.create(
+            workspace=workspace,
+            broker=schwab,
+            security=security,
+            grant_id="MIGRATED-2022",
+            date=date(2022, 11, 9),
+            units=10,
+        )
+
+        vest = Vest.objects.create(
+            workspace=workspace,
+            broker=etrade,
+            grant_id=grant.grant_id,
+            date=date(2026, 1, 1),
+            units=10,
+        )
+
+        self.assertEqual(vest.security, security)
+        self.assertEqual(event_security(vest, [grant]), security)
+
+    def test_etrade_grant_does_not_link_events_recorded_at_schwab(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        schwab = Broker.objects.create(workspace=workspace, name="Charles Schwab")
+        etrade = Broker.objects.create(workspace=workspace, name="MS E*TRADE")
+        security = Security.objects.create(workspace=workspace, name="Cisco", ticker="CSCO")
+        grant = Grant.objects.create(
+            workspace=workspace,
+            broker=etrade,
+            security=security,
+            grant_id="ETRADE-2023",
+            date=date(2023, 11, 8),
+            units=10,
+        )
+
+        vest = Vest(
+            workspace=workspace,
+            broker=schwab,
+            grant_id=grant.grant_id,
+            date=date(2026, 1, 1),
+            units=10,
+        )
+
+        self.assertIsNone(event_security(vest, [grant]))
 
     def test_grant_creation_backfills_events_imported_first(self):
         workspace = self.bob.workspace_memberships.get().workspace

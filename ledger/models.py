@@ -352,7 +352,6 @@ def backfill_event_security_from_grant(sender, instance, **kwargs):
     for event_model in (Vest, Sale):
         events = event_model.objects.filter(
             workspace_id=instance.workspace_id,
-            broker_id=instance.broker_id,
             grant_id=instance.grant_id,
             security__isnull=True,
         )

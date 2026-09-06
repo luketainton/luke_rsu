@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
+from .broker_rules import grant_accepts_event_broker
+
 ZERO = Decimal(0)
 
 
@@ -144,16 +146,20 @@ def dashboard_summary(vests, sales):
 def ticker_positions(grants, vests, sales, prices):
     """Return ticker-level estimated positions from linked Grant IDs and saved quotes."""
     tickers_by_grant = {}
-    tickers_by_grant_id = defaultdict(set)
     for grant in grants:
         if grant.security and grant.grant_id:
             tickers_by_grant[(grant.broker_id, grant.grant_id)] = grant.security.ticker
-            tickers_by_grant_id[grant.grant_id].add(grant.security.ticker)
 
     def ticker_for(event):
         if ticker := tickers_by_grant.get((event.broker_id, event.grant_id)):
             return ticker
-        candidates = tickers_by_grant_id.get(event.grant_id, set())
+        candidates = {
+            grant.security.ticker
+            for grant in grants
+            if grant.grant_id == event.grant_id
+            and grant.security
+            and grant_accepts_event_broker(grant, getattr(event, "broker", None))
+        }
         return next(iter(candidates)) if len(candidates) == 1 else None
 
     positions = {}

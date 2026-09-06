@@ -8,6 +8,8 @@ from datetime import timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
+from .broker_rules import grant_accepts_event_broker
+
 ZERO = Decimal(0)
 
 
@@ -71,8 +73,15 @@ def event_security(event, grants):
     """Resolve directly, then safely fall back to the legacy Grant link."""
     if getattr(event, "security_id", None):
         return event.security
-    key = (event.broker_id, event.grant_id)
-    candidates = [grant.security for grant in grants if (grant.broker_id, grant.grant_id) == key]
+    candidates = [
+        grant.security
+        for grant in grants
+        if grant.grant_id == event.grant_id
+        and (
+            grant.broker_id == getattr(event, "broker_id", None)
+            or grant_accepts_event_broker(grant, getattr(event, "broker", None))
+        )
+    ]
     candidates = [security for security in candidates if security]
     if len({security.id for security in candidates}) == 1:
         return candidates[0]

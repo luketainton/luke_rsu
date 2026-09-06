@@ -12,6 +12,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from .broker_rules import grants_for_event_broker
 from .dashboard_data import dashboard_summary, ticker_positions
 from .enrichment import infer_event_security
 from .finnhub import is_configured
@@ -909,7 +910,7 @@ def broker_grant_ids(request, broker_id):
     member = request_membership(request)
     broker = get_object_or_404(Broker, id=broker_id, workspace=member.workspace)
     grant_ids = (
-        Grant.objects.filter(workspace=member.workspace, broker=broker)
+        grants_for_event_broker(Grant.objects.filter(workspace=member.workspace), broker)
         .exclude(grant_id="")
         .order_by("grant_id")
         .values_list("grant_id", flat=True)
