@@ -54,12 +54,15 @@ jobs:
           commit_url_base="${GITEA_SERVER_URL}/${GITEA_REPOSITORY}/commit"
           if [ -n "${previous_tag}" ]; then
             release_notes="$(git log --pretty=format:"- [%h](${commit_url_base}/%H) %s" "${previous_tag}..${RELEASE_TAG}")"
+            changelog_range="${previous_tag}...${RELEASE_TAG}"
           else
             release_notes="$(git log --pretty=format:"- [%h](${commit_url_base}/%H) %s" "${RELEASE_TAG}")"
+            changelog_range="${RELEASE_TAG}"
           fi
           if [ -z "${release_notes}" ]; then
             release_notes="- No commits found since the previous release."
           fi
+          release_notes="${release_notes}"$'\n\n'"Full Changelog: ${changelog_range}"
 
           release_payload="$(jq -n \
             --arg tag "${RELEASE_TAG}" \
