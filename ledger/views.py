@@ -1,3 +1,5 @@
+import hashlib
+import json
 from decimal import Decimal
 
 from django.contrib import messages
@@ -11,6 +13,7 @@ from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .dashboard_data import dashboard_summary, ticker_positions
+from .enrichment import infer_event_security
 from .finnhub import is_configured
 from .forms import (
     BenefitHistoryImportForm,
@@ -19,7 +22,10 @@ from .forms import (
     GrantForm,
     HmrcRateFetchForm,
     MembershipForm,
+    PoolAdjustmentForm,
+    PurchaseForm,
     SaleForm,
+    Section104OpeningBalanceForm,
     SecurityForm,
     StockPriceForm,
     VestForm,
@@ -40,14 +46,18 @@ from .models import (
     Broker,
     FxRate,
     Grant,
+    PoolAdjustment,
+    Purchase,
     Sale,
+    Section104OpeningBalance,
+    Section104Snapshot,
     Security,
     StockPrice,
     Vest,
     Workspace,
     WorkspaceMembership,
 )
-from .section104 import section_104_report
+from .section104 import event_date, event_security, section_104_report
 from .wise import WiseRateUnavailable
 from .wise import fetch_usd_rate as fetch_wise_usd_rate
 from .workspaces import active_membership, membership_for_workspace
@@ -402,7 +412,52 @@ def section_104_working_paper(request):
     )
     vests = list(Vest.objects.filter(workspace=member.workspace).select_related("broker"))
     sales = list(Sale.objects.filter(workspace=member.workspace).select_related("broker"))
-    reports = [section_104_report(security, grants, vests, sales) for security in securities]
+    purchases = list(
+        Purchase.objects.filter(workspace=member.workspace).select_related("broker", "security")
+    )
+    adjustments = list(PoolAdjustment.objects.filter(workspace=member.workspace))
+    opening_balances = {
+        balance.security_id: balance
+        for balance in Section104OpeningBalance.objects.filter(workspace=member.workspace)
+    }
+    reports = []
+    for security in securities:
+        events = [
+            event
+            for event in [*vests, *sales, *purchases]
+            if (
+                event.security_id == security.id
+                if isinstance(event, Purchase)
+                else event_security(event, grants) == security
+            )
+        ]
+        identities = {
+            (
+                getattr(event, "beneficial_owner", ""),
+                getattr(event, "capacity", "personal"),
+                getattr(event, "account_reference", ""),
+            )
+            for event in events
+        }
+        if len(identities) <= 1:
+            reports.append(
+                section_104_report(
+                    security,
+                    grants,
+                    vests,
+                    sales,
+                    opening_balances.get(security.id),
+                    purchases,
+                    adjustments,
+                )
+            )
+        else:
+            for identity in sorted(identities):
+                reports.append(
+                    section_104_report(
+                        security, grants, vests, sales, None, purchases, adjustments, identity
+                    )
+                )
     return render(
         request,
         "ledger/section_104.html",
@@ -411,6 +466,259 @@ def section_104_working_paper(request):
             "reports": reports,
             "securities": Security.objects.filter(workspace=member.workspace),
             "selected_security": security_id,
+        },
+    )
+
+
+def section104_snapshot_payload(report):
+    return {
+        "security": report.security.id,
+        "pool_units": str(report.pool_units),
+        "pool_cost": None if report.pool_cost is None else str(report.pool_cost),
+        "warnings": report.warnings,
+        "disposals": [
+            {
+                "sale_id": getattr(disposal.sale, "id", None),
+                "date": event_date(disposal.sale).isoformat(),
+                "units": str(disposal.sale.units),
+                "matches": [
+                    {
+                        "kind": match.kind,
+                        "units": str(match.units),
+                        "cost": None if match.cost is None else str(match.cost),
+                        "proceeds": None if match.proceeds is None else str(match.proceeds),
+                    }
+                    for match in disposal.matches
+                ],
+                "warnings": disposal.warnings,
+            }
+            for disposal in report.disposals
+        ],
+    }
+
+
+@login_required
+def save_section_104_snapshot(request, security_id):
+    member = request_membership(request)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    security = get_object_or_404(Security, id=security_id, workspace=member.workspace)
+    grants = list(
+        Grant.objects.filter(workspace=member.workspace).select_related("security", "broker")
+    )
+    vests = list(
+        Vest.objects.filter(workspace=member.workspace).select_related("broker", "security")
+    )
+    sales = list(
+        Sale.objects.filter(workspace=member.workspace).select_related("broker", "security")
+    )
+    purchases = list(
+        Purchase.objects.filter(workspace=member.workspace).select_related("broker", "security")
+    )
+    adjustments = list(PoolAdjustment.objects.filter(workspace=member.workspace))
+    opening = Section104OpeningBalance.objects.filter(
+        workspace=member.workspace, security=security
+    ).first()
+    report = section_104_report(security, grants, vests, sales, opening, purchases, adjustments)
+    payload = section104_snapshot_payload(report)
+    payload["inputs"] = {
+        "grants": [
+            {
+                "id": grant.id,
+                "security_id": grant.security_id,
+                "date": grant.date.isoformat(),
+                "units": str(grant.units),
+            }
+            for grant in grants
+        ],
+        "vests": [
+            {
+                "id": vest.id,
+                "security_id": vest.security_id,
+                "date": event_date(vest).isoformat(),
+                "units": str(vest.units),
+                "withheld_units": str(vest.withheld_units),
+                "capital_cost_gbp": None
+                if vest.capital_cost_gbp is None
+                else str(vest.capital_cost_gbp),
+            }
+            for vest in vests
+        ],
+        "sales": [
+            {
+                "id": sale.id,
+                "security_id": sale.security_id,
+                "date": event_date(sale).isoformat(),
+                "units": str(sale.units),
+                "proceeds_gbp": None if sale.proceeds_gbp is None else str(sale.proceeds_gbp),
+                "fees_gbp": str(sale.fees_gbp),
+            }
+            for sale in sales
+        ],
+        "purchases": [
+            {
+                "id": purchase.id,
+                "security_id": purchase.security_id,
+                "date": event_date(purchase).isoformat(),
+                "units": str(purchase.units),
+                "capital_cost_gbp": None
+                if purchase.capital_cost_gbp is None
+                else str(purchase.capital_cost_gbp),
+                "fees_gbp": str(purchase.fees_gbp),
+            }
+            for purchase in purchases
+        ],
+        "adjustments": [
+            {
+                "id": adjustment.id,
+                "security_id": adjustment.security_id,
+                "effective_on": adjustment.effective_on.isoformat(),
+                "units_delta": str(adjustment.units_delta),
+                "cost_delta_gbp": str(adjustment.cost_delta_gbp),
+            }
+            for adjustment in adjustments
+        ],
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    Section104Snapshot.objects.create(
+        workspace=member.workspace,
+        security=security,
+        engine_version="section104-v2",
+        input_hash=hashlib.sha256(encoded).hexdigest(),
+        payload=payload,
+    )
+    messages.success(request, "Section 104 snapshot saved.")
+    return redirect(return_url(request, "section_104_working_paper"))
+
+
+@login_required
+def section_104_reconciliation(request):
+    member = request_membership(request)
+    workspace = member.workspace
+    issues = []
+    for label, event_model in (("Vest", Vest), ("Sale", Sale)):
+        for event in event_model.objects.filter(workspace=workspace).select_related(
+            "security", "broker"
+        ):
+            inferred_id = infer_event_security(event)
+            if event.security_id is None and inferred_id is None:
+                issues.append((label, event, "No direct Security and no unique Grant match"))
+            elif event.security_id is None and inferred_id is not None:
+                issues.append((label, event, "Security link is missing; save again to enrich"))
+            elif inferred_id is not None and inferred_id != event.security_id:
+                issues.append((label, event, "Direct Security differs from Grant Security"))
+    for purchase in Purchase.objects.filter(workspace=workspace).select_related(
+        "security", "broker"
+    ):
+        if purchase.security_id is None:
+            issues.append(("Purchase", purchase, "No Security selected"))
+    return render(
+        request,
+        "ledger/section_104_reconciliation.html",
+        {
+            "membership": member,
+            "issues": issues,
+            "snapshot_count": Section104Snapshot.objects.filter(workspace=workspace).count(),
+        },
+    )
+
+
+@login_required
+def add_section_104_opening_balance(request):
+    member = request_membership(request)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    form = Section104OpeningBalanceForm(request.POST or None, workspace=member.workspace)
+    if request.method == "POST" and form.is_valid():
+        balance = form.save(commit=False)
+        balance.workspace = member.workspace
+        balance.save()
+        messages.success(request, "Section 104 opening balance saved.")
+        return redirect(return_url(request, "section_104_working_paper"))
+    return render(
+        request,
+        "ledger/form.html",
+        {
+            "form": form,
+            "title": "Section 104 opening balance",
+            "next": return_url(request, "section_104_working_paper"),
+        },
+    )
+
+
+@login_required
+def edit_section_104_opening_balance(request, balance_id):
+    member = request_membership(request)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    balance = get_object_or_404(Section104OpeningBalance, id=balance_id, workspace=member.workspace)
+    form = Section104OpeningBalanceForm(
+        request.POST or None, instance=balance, workspace=member.workspace
+    )
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Section 104 opening balance updated.")
+        return redirect(return_url(request, "section_104_working_paper"))
+    return render(
+        request,
+        "ledger/form.html",
+        {
+            "form": form,
+            "title": "Edit Section 104 opening balance",
+            "next": return_url(request, "section_104_working_paper"),
+        },
+    )
+
+
+@login_required
+def delete_section_104_opening_balance(request, balance_id):
+    return delete_record(
+        request,
+        Section104OpeningBalance,
+        balance_id,
+        "Section 104 opening balance",
+        "section_104_working_paper",
+    )
+
+
+@login_required
+def add_purchase(request):
+    return add_record(request, PurchaseForm, "Purchase", "section_104_working_paper")
+
+
+@login_required
+def edit_purchase(request, purchase_id):
+    return edit_record(
+        request, Purchase, PurchaseForm, purchase_id, "Purchase", "section_104_working_paper"
+    )
+
+
+@login_required
+def delete_purchase(request, purchase_id):
+    return delete_record(request, Purchase, purchase_id, "purchase", "section_104_working_paper")
+
+
+@login_required
+def add_pool_adjustment(request):
+    member = request_membership(request)
+    if not can_edit(member):
+        return HttpResponseForbidden("Editor permission required")
+    form = PoolAdjustmentForm(request.POST or None, workspace=member.workspace)
+    if request.method == "POST" and form.is_valid():
+        adjustment = form.save(commit=False)
+        adjustment.workspace = member.workspace
+        adjustment.save()
+        messages.success(request, "Pool adjustment saved.")
+        return redirect(return_url(request, "section_104_working_paper"))
+    return render(
+        request,
+        "ledger/form.html",
+        {
+            "form": form,
+            "title": "Pool adjustment",
+            "next": return_url(request, "section_104_working_paper"),
         },
     )
 

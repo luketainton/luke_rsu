@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="actions"><h1>Section 104 reconciliation</h1><a href="{% url 'section_104_working_paper' %}">Working paper</a></div>
+<p class="muted">Resolve these issues before relying on a Section 104 snapshot. Existing Grant links are retained as an inference aid; they are not used when they conflict with an explicit Security link.</p>
+<p class="muted">Saved audit snapshots: {{ snapshot_count }}</p>
+<section class="card"><div class="table-scroll"><table><tr><th>Record</th><th>Date</th><th>Units</th><th>Grant ID</th><th>Security</th><th>Issue</th></tr>{% for label, event, issue in issues %}<tr><td>{{ label }}</td><td>{{ event.tax_date }}</td><td>{{ event.units }}</td><td>{{ event.grant_id|default:"—" }}</td><td>{{ event.security|default:"—" }}</td><td class="loss">{{ issue }}</td></tr>{% empty %}<tr><td colspan="6">No linkage issues found.</td></tr>{% endfor %}</table></div></section>
+{% endblock %}

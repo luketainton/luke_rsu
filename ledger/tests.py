@@ -21,6 +21,8 @@ from .models import (
     FxRate,
     Grant,
     Sale,
+    Section104OpeningBalance,
+    Section104Snapshot,
     Security,
     StockPrice,
     Vest,
@@ -533,6 +535,207 @@ class WorkspaceIsolationTests(TestCase):
         response = self.client.get(reverse("section_104_working_paper"))
         self.assertContains(response, "Section 104 pool")
         self.assertContains(response, "30-day")
+
+    def test_section_104_uses_direct_event_security_without_a_grant_id(self):
+        from .models import Security
+
+        workspace = self.bob.workspace_memberships.get().workspace
+        security = Security.objects.create(workspace=workspace, name="Microsoft", ticker="MSFT")
+        FxRate.objects.create(
+            workspace=workspace,
+            label="2026 test rate",
+            method="manual",
+            starts_on=date(2026, 1, 1),
+            ends_on=date(2026, 12, 31),
+            usd_per_gbp=Decimal("1.25"),
+            source_url="https://example.test/rate",
+        )
+        vest = Vest.objects.create(
+            workspace=workspace,
+            security=security,
+            date=date(2026, 5, 1),
+            units=10,
+            usd_price=100,
+        )
+        sale = Sale.objects.create(
+            workspace=workspace,
+            security=security,
+            date=date(2026, 6, 1),
+            units=4,
+            usd_price=150,
+        )
+
+        report = section_104_report(security, [], [vest], [sale])
+
+        self.assertEqual(report.pool_units, Decimal(6))
+        self.assertEqual(report.disposals[0].matches[0].kind, "Section 104 pool")
+        self.assertFalse(report.warnings)
+
+    def test_event_security_is_inferred_when_saved_from_unique_grant(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        broker = Broker.objects.create(workspace=workspace, name="Charles Schwab")
+        security = Security.objects.create(workspace=workspace, name="Microsoft", ticker="MSFT")
+        Grant.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-2026",
+            security=security,
+            date=date(2026, 5, 1),
+            units=10,
+        )
+
+        vest = Vest.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-2026",
+            date=date(2026, 5, 1),
+            units=10,
+        )
+        sale = Sale.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-2026",
+            date=date(2026, 6, 1),
+            units=2,
+        )
+
+        self.assertEqual(vest.security, security)
+        self.assertEqual(sale.security, security)
+
+    def test_grant_creation_backfills_events_imported_first(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        broker = Broker.objects.create(workspace=workspace, name="Charles Schwab")
+        vest = Vest.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-2026",
+            date=date(2026, 5, 1),
+            units=10,
+        )
+        sale = Sale.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-2026",
+            date=date(2026, 6, 1),
+            units=2,
+        )
+        security = Security.objects.create(workspace=workspace, name="Microsoft", ticker="MSFT")
+        Grant.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-2026",
+            security=security,
+            date=date(2026, 5, 1),
+            units=10,
+        )
+
+        vest.refresh_from_db()
+        sale.refresh_from_db()
+        self.assertEqual(vest.security, security)
+        self.assertEqual(sale.security, security)
+
+    def test_opening_balance_and_explicit_gbp_values_feed_the_pool(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        security = Security.objects.create(workspace=workspace, name="Microsoft", ticker="MSFT")
+        Section104OpeningBalance.objects.create(
+            workspace=workspace,
+            security=security,
+            effective_on=date(2026, 1, 1),
+            units=10,
+            pool_cost_gbp=Decimal(100),
+        )
+        vest = Vest.objects.create(
+            workspace=workspace,
+            security=security,
+            date=date(2026, 5, 1),
+            units=4,
+            usd_price=1,
+            capital_cost_gbp=Decimal(80),
+        )
+        sale = Sale.objects.create(
+            workspace=workspace,
+            security=security,
+            date=date(2026, 6, 1),
+            units=6,
+            proceeds_gbp=Decimal(150),
+        )
+
+        report = section_104_report(
+            security, [], [vest], [sale], Section104OpeningBalance.objects.get()
+        )
+
+        self.assertEqual(
+            report.disposals[0].matches[0].cost, Decimal(180) * Decimal(6) / Decimal(14)
+        )
+        self.assertEqual(report.disposals[0].matches[0].proceeds, Decimal(150))
+        self.assertEqual(report.pool_units, Decimal(8))
+        self.assertEqual(report.pool_cost, Decimal(180) - Decimal(180) * Decimal(6) / Decimal(14))
+
+    def test_gross_sell_to_cover_creates_a_same_day_disposal(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        security = Security.objects.create(workspace=workspace, name="Microsoft", ticker="MSFT")
+        vest = Vest.objects.create(
+            workspace=workspace,
+            security=security,
+            date=date(2026, 5, 1),
+            units=10,
+            withheld_units=2,
+            withholding_treatment="gross_sell_to_cover",
+            capital_cost_gbp=Decimal(100),
+            sell_to_cover_proceeds_gbp=Decimal(30),
+        )
+
+        report = section_104_report(security, [], [vest], [])
+
+        self.assertEqual(len(report.disposals), 1)
+        self.assertEqual(report.disposals[0].sale.units, Decimal(2))
+        self.assertEqual(report.disposals[0].matches[0].kind, "Same day")
+        self.assertEqual(report.disposals[0].gain_or_loss, Decimal(10))
+        self.assertEqual(report.pool_units, Decimal(8))
+        self.assertEqual(report.pool_cost, Decimal(80))
+
+    def test_editor_can_save_an_immutable_section_104_snapshot(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        security = Security.objects.create(workspace=workspace, name="Microsoft", ticker="MSFT")
+        self.client.force_login(self.bob)
+
+        response = self.client.post(
+            reverse("save_section_104_snapshot", args=[security.id]),
+            {"next": reverse("section_104_working_paper")},
+        )
+
+        self.assertRedirects(response, reverse("section_104_working_paper"))
+        snapshot = Section104Snapshot.objects.get(security=security)
+        self.assertEqual(snapshot.engine_version, "section104-v2")
+        self.assertEqual(len(snapshot.input_hash), 64)
+        self.assertEqual(snapshot.payload["security"], security.id)
+
+    def test_section_104_page_separates_pool_identities(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        security = Security.objects.create(workspace=workspace, name="Microsoft", ticker="MSFT")
+        Vest.objects.create(
+            workspace=workspace,
+            security=security,
+            date=date(2026, 5, 1),
+            units=2,
+            beneficial_owner="Alice",
+            capacity="personal",
+        )
+        Vest.objects.create(
+            workspace=workspace,
+            security=security,
+            date=date(2026, 5, 1),
+            units=3,
+            beneficial_owner="Alice",
+            capacity="nominee",
+        )
+        self.client.force_login(self.bob)
+
+        response = self.client.get(reverse("section_104_working_paper"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Capacity: personal")
+        self.assertContains(response, "Capacity: nominee")
 
     def test_hmrc_financial_year_uses_5_april_boundary(self):
         workspace = self.bob.workspace_memberships.get().workspace

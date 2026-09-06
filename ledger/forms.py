@@ -5,7 +5,10 @@ from .models import (
     Broker,
     FxRate,
     Grant,
+    PoolAdjustment,
+    Purchase,
     Sale,
+    Section104OpeningBalance,
     Security,
     StockPrice,
     Vest,
@@ -21,9 +24,22 @@ class RecordBaseForm(forms.ModelForm):
         self.fields["broker"].empty_label = "No broker selected"
 
     class Meta:
-        fields = ["broker", "grant_id", "date", "units", "usd_price", "notes"]
+        fields = [
+            "broker",
+            "grant_id",
+            "date",
+            "contract_date",
+            "units",
+            "usd_price",
+            "beneficial_owner",
+            "capacity",
+            "account_reference",
+            "evidence_url",
+            "notes",
+        ]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
+            "contract_date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 2}),
         }
 
@@ -36,7 +52,20 @@ class GrantForm(RecordBaseForm):
 
     class Meta(RecordBaseForm.Meta):
         model = Grant
-        fields = ["broker", "grant_id", "security", "date", "units", "usd_price", "notes"]
+        fields = [
+            "broker",
+            "grant_id",
+            "security",
+            "date",
+            "contract_date",
+            "units",
+            "usd_price",
+            "beneficial_owner",
+            "capacity",
+            "account_reference",
+            "evidence_url",
+            "notes",
+        ]
 
 
 class SecurityForm(forms.ModelForm):
@@ -67,18 +96,96 @@ class BrokerGrantRecordForm(RecordBaseForm):
             required=False,
             widget=forms.Select(attrs={"data-grant-id-select": "true"}),
         )
+        self.fields["security"].queryset = Security.objects.filter(workspace=workspace)
+        self.fields["security"].required = False
+        self.fields["security"].empty_label = "Infer from Grant ID where possible"
 
 
 class VestForm(BrokerGrantRecordForm):
     class Meta(RecordBaseForm.Meta):
         model = Vest
-        fields = RecordBaseForm.Meta.fields + ["withheld_units", "income_tax", "employee_nic"]
+        fields = RecordBaseForm.Meta.fields + [
+            "security",
+            "capital_cost_gbp",
+            "withholding_treatment",
+            "withheld_units",
+            "sell_to_cover_proceeds_gbp",
+            "sell_to_cover_fees_gbp",
+            "income_tax",
+            "employee_nic",
+        ]
 
 
 class SaleForm(BrokerGrantRecordForm):
     class Meta(RecordBaseForm.Meta):
         model = Sale
-        fields = RecordBaseForm.Meta.fields + ["fees_gbp"]
+        fields = RecordBaseForm.Meta.fields + ["security", "proceeds_gbp", "fees_gbp"]
+
+
+class PurchaseForm(forms.ModelForm):
+    def __init__(self, *args, workspace, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["broker"].queryset = Broker.objects.filter(workspace=workspace)
+        self.fields["security"].queryset = Security.objects.filter(workspace=workspace)
+        self.fields["security"].empty_label = "Select security"
+
+    class Meta:
+        model = Purchase
+        fields = [
+            "broker",
+            "security",
+            "date",
+            "contract_date",
+            "units",
+            "usd_price",
+            "capital_cost_gbp",
+            "fees_gbp",
+            "beneficial_owner",
+            "capacity",
+            "account_reference",
+            "evidence_url",
+            "notes",
+        ]
+        widgets = {
+            "date": forms.DateInput(attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+
+class PoolAdjustmentForm(forms.ModelForm):
+    def __init__(self, *args, workspace, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["security"].queryset = Security.objects.filter(workspace=workspace)
+
+    class Meta:
+        model = PoolAdjustment
+        fields = [
+            "security",
+            "effective_on",
+            "units_delta",
+            "cost_delta_gbp",
+            "reason",
+            "source_url",
+            "notes",
+        ]
+        widgets = {
+            "effective_on": forms.DateInput(attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+
+class Section104OpeningBalanceForm(forms.ModelForm):
+    def __init__(self, *args, workspace, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["security"].queryset = Security.objects.filter(workspace=workspace)
+
+    class Meta:
+        model = Section104OpeningBalance
+        fields = ["security", "effective_on", "units", "pool_cost_gbp", "source_url", "notes"]
+        widgets = {
+            "effective_on": forms.DateInput(attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
 
 
 class BrokerForm(forms.ModelForm):

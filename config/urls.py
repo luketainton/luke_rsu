@@ -25,6 +25,15 @@ urlpatterns = [
     path("sales/<int:sale_id>/edit/", views.edit_sale, name="edit_sale"),
     path("sales/<int:sale_id>/delete/", views.delete_sale, name="delete_sale"),
     path("sales/", views.sale_list, name="sale_list"),
+    path("purchases/add/", views.add_purchase, name="add_purchase"),
+    path("purchases/<int:purchase_id>/edit/", views.edit_purchase, name="edit_purchase"),
+    path("purchases/<int:purchase_id>/delete/", views.delete_purchase, name="delete_purchase"),
+    path("section-104/adjustments/add/", views.add_pool_adjustment, name="add_pool_adjustment"),
+    path(
+        "section-104/<int:security_id>/snapshot/",
+        views.save_section_104_snapshot,
+        name="save_section_104_snapshot",
+    ),
     path("brokers/", views.broker_management, name="broker_management"),
     path("brokers/<int:broker_id>/grant-ids/", views.broker_grant_ids, name="broker_grant_ids"),
     path("brokers/add/", views.add_broker, name="add_broker"),
@@ -46,6 +55,26 @@ urlpatterns = [
     path("securities/<int:security_id>/edit/", views.edit_security, name="edit_security"),
     path("securities/<int:security_id>/delete/", views.delete_security, name="delete_security"),
     path("section-104/", views.section_104_working_paper, name="section_104_working_paper"),
+    path(
+        "section-104/reconciliation/",
+        views.section_104_reconciliation,
+        name="section_104_reconciliation",
+    ),
+    path(
+        "section-104/opening/add/",
+        views.add_section_104_opening_balance,
+        name="add_section_104_opening_balance",
+    ),
+    path(
+        "section-104/opening/<int:balance_id>/edit/",
+        views.edit_section_104_opening_balance,
+        name="edit_section_104_opening_balance",
+    ),
+    path(
+        "section-104/opening/<int:balance_id>/delete/",
+        views.delete_section_104_opening_balance,
+        name="delete_section_104_opening_balance",
+    ),
     path("access/", views.access_management, name="access_management"),
     path(
         "access/<int:membership_id>/remove/",

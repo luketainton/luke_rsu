@@ -4,7 +4,11 @@ from .models import (
     Broker,
     FxRate,
     Grant,
+    PoolAdjustment,
+    Purchase,
     Sale,
+    Section104OpeningBalance,
+    Section104Snapshot,
     Security,
     StockPrice,
     User,
@@ -14,5 +18,20 @@ from .models import (
 )
 
 admin.site.register(
-    [User, Workspace, WorkspaceMembership, Broker, Security, Grant, Vest, Sale, FxRate, StockPrice]
+    [
+        User,
+        Workspace,
+        WorkspaceMembership,
+        Broker,
+        Security,
+        Grant,
+        Vest,
+        Sale,
+        Purchase,
+        PoolAdjustment,
+        FxRate,
+        StockPrice,
+        Section104OpeningBalance,
+        Section104Snapshot,
+    ]
 )

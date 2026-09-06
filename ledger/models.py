@@ -5,7 +5,7 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Lower
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django_scim.models import AbstractSCIMUserMixin
 
@@ -89,26 +89,36 @@ class WorkspaceRecord(models.Model):
     grant_id = models.CharField(max_length=120, blank=True)
     broker = models.ForeignKey(Broker, on_delete=models.SET_NULL, null=True, blank=True)
     date = models.DateField()
+    contract_date = models.DateField(null=True, blank=True)
     units = models.DecimalField(max_digits=16, decimal_places=4)
     usd_price = models.DecimalField(max_digits=16, decimal_places=6, null=True, blank=True)
     notes = models.TextField(blank=True)
+    beneficial_owner = models.CharField(max_length=160, blank=True)
+    capacity = models.CharField(max_length=40, default="personal", blank=True)
+    account_reference = models.CharField(max_length=160, blank=True)
+    evidence_url = models.URLField(blank=True)
     source_key = models.CharField(max_length=64, null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property
     def hmrc_financial_year(self):
         """Return the UK tax year containing this event (5 April to 4 April)."""
+        event_date = self.tax_date
         start_year = (
-            self.date.year if (self.date.month, self.date.day) >= (4, 5) else self.date.year - 1
+            event_date.year if (event_date.month, event_date.day) >= (4, 5) else event_date.year - 1
         )
         return f"{start_year}/{(start_year + 1) % 100:02d}"
+
+    @property
+    def tax_date(self):
+        return self.contract_date or self.date
 
     @property
     def gbp_per_usd(self):
         """Derive GBP per USD from the saved rate that covers this event date."""
         rate = (
             FxRate.objects.filter(
-                workspace=self.workspace, starts_on__lte=self.date, ends_on__gte=self.date
+                workspace=self.workspace, starts_on__lte=self.tax_date, ends_on__gte=self.tax_date
             )
             .order_by("-starts_on", "-id")
             .first()
@@ -133,6 +143,34 @@ class Grant(WorkspaceRecord):
 
 
 class Vest(WorkspaceRecord):
+    # Optional direct link for records that have no usable Grant ID.
+    security = models.ForeignKey(Security, on_delete=models.SET_NULL, null=True, blank=True)
+    capital_cost_gbp = models.DecimalField(
+        max_digits=16,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Total allowable CGT acquisition cost for the shares acquired, if evidenced.",
+    )
+    withholding_treatment = models.CharField(
+        max_length=20,
+        choices=[
+            ("net", "Net shares acquired (legacy/default)"),
+            ("gross_sell_to_cover", "Gross shares acquired; withheld shares sold to cover"),
+        ],
+        default="net",
+        blank=True,
+    )
+    sell_to_cover_proceeds_gbp = models.DecimalField(
+        max_digits=16,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Net GBP proceeds for the withheld-share sell-to-cover disposal, if evidenced.",
+    )
+    sell_to_cover_fees_gbp = models.DecimalField(
+        max_digits=16, decimal_places=2, default=0, blank=True
+    )
     withheld_units = models.DecimalField(max_digits=16, decimal_places=4, default=0)
     income_tax = models.DecimalField(max_digits=16, decimal_places=2, default=0)
     employee_nic = models.DecimalField(max_digits=16, decimal_places=2, default=0)
@@ -148,6 +186,15 @@ class Vest(WorkspaceRecord):
 
 
 class Sale(WorkspaceRecord):
+    # Optional direct link for open-market or imported sales without a Grant ID.
+    security = models.ForeignKey(Security, on_delete=models.SET_NULL, null=True, blank=True)
+    proceeds_gbp = models.DecimalField(
+        max_digits=16,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Net disposal proceeds in GBP, if evidenced directly.",
+    )
     fees_gbp = models.DecimalField(max_digits=16, decimal_places=2, default=0)
 
     class Meta:
@@ -156,6 +203,23 @@ class Sale(WorkspaceRecord):
                 fields=["workspace", "source_key"],
                 condition=Q(source_key__isnull=False),
                 name="unique_imported_sale",
+            )
+        ]
+
+
+class Purchase(WorkspaceRecord):
+    """An open-market acquisition that can enter a Section 104 pool."""
+
+    security = models.ForeignKey(Security, on_delete=models.SET_NULL, null=True, blank=True)
+    capital_cost_gbp = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
+    fees_gbp = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "source_key"],
+                condition=Q(source_key__isnull=False),
+                name="unique_imported_purchase",
             )
         ]
 
@@ -177,6 +241,61 @@ class FxRate(models.Model):
     ends_on = models.DateField()
     usd_per_gbp = models.DecimalField(max_digits=16, decimal_places=8)
     source_url = models.URLField()
+
+
+class Section104OpeningBalance(models.Model):
+    """An evidenced pool balance carried into the ledger."""
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name="opening_balances"
+    )
+    security = models.ForeignKey(
+        Security, on_delete=models.CASCADE, related_name="opening_balances"
+    )
+    effective_on = models.DateField()
+    units = models.DecimalField(max_digits=16, decimal_places=4)
+    pool_cost_gbp = models.DecimalField(max_digits=16, decimal_places=2)
+    source_url = models.URLField(blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "security"], name="unique_workspace_security_opening_balance"
+            )
+        ]
+
+
+class PoolAdjustment(models.Model):
+    """Manual, evidenced pool movement for a corporate action."""
+
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE)
+    security = models.ForeignKey(Security, on_delete=models.CASCADE)
+    effective_on = models.DateField()
+    units_delta = models.DecimalField(max_digits=16, decimal_places=4, default=0)
+    cost_delta_gbp = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    reason = models.CharField(max_length=160)
+    source_url = models.URLField(blank=True)
+    notes = models.TextField(blank=True)
+
+
+class Section104Snapshot(models.Model):
+    """Immutable JSON evidence of a generated Section 104 working paper."""
+
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE)
+    security = models.ForeignKey(Security, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    engine_version = models.CharField(max_length=40)
+    input_hash = models.CharField(max_length=64)
+    payload = models.JSONField()
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValueError("Section 104 snapshots are immutable")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError("Section 104 snapshots are immutable")
 
 
 class StockPrice(models.Model):
@@ -214,3 +333,30 @@ def create_private_workspace(sender, instance, created, **kwargs):
         WorkspaceMembership.objects.create(
             workspace=workspace, user=instance, role=WorkspaceMembership.Role.OWNER
         )
+
+
+@receiver(pre_save, sender=Vest)
+@receiver(pre_save, sender=Sale)
+def infer_event_security_on_save(sender, instance, **kwargs):
+    """Enrich every write path, including imports and Django admin."""
+    from .enrichment import enrich_event_security
+
+    enrich_event_security(instance)
+
+
+@receiver(post_save, sender=Grant)
+def backfill_event_security_from_grant(sender, instance, **kwargs):
+    """Backfill earlier imported events when their Grant is created later."""
+    from .enrichment import enrich_event_security
+
+    for event_model in (Vest, Sale):
+        events = event_model.objects.filter(
+            workspace_id=instance.workspace_id,
+            broker_id=instance.broker_id,
+            grant_id=instance.grant_id,
+            security__isnull=True,
+        )
+        for event in events.iterator():
+            enrich_event_security(event)
+            if event.security_id is not None:
+                event.save(update_fields=["security"])
