@@ -42,7 +42,7 @@
     {% for year in tax_years %}<div class="chart-row"><span>{{ year.label }}</span><div class="chart-track"><div class="chart-bar {% if year.gain_or_loss < 0 %}loss-bar{% else %}gain-bar{% endif %}" style="width:{{ year.chart_width }}%"></div></div><strong class="{% if year.gain_or_loss < 0 %}loss{% else %}gain{% endif %}">£{{ year.gain_or_loss|floatformat:0 }}</strong></div>{% endfor %}
   </div>
   {% else %}<p class="muted">Add vest and sale records with USD prices to begin estimating performance and CGT.</p>{% endif %}
-  {% if incomplete_sales %}<p class="message">{{ incomplete_sales }} sale{{ incomplete_sales|pluralize }} cannot yet be included in the estimate because a USD price/rate or sufficient vested shares are missing.</p>{% endif %}
+  {% if incomplete_sales %}<p class="message">{{ incomplete_sales }} sale{{ incomplete_sales|pluralize }} cannot yet be included in the estimate because evidence or sufficient shares are missing.</p><ul>{% for detail in incomplete_sale_details %}<li>{{ detail }}</li>{% endfor %}</ul>{% endif %}
   <p class="muted small-print">Estimate only: linked records use HMRC same-day, following-30-day and Section 104 matching, with later acquisitions as the final fallback. It includes losses arising in this ledger and the annual exempt amount, but does not know about gains or losses outside this ledger, losses previously claimed or carried forward, or your taxable-income position. The CGT range is therefore conditional on your wider tax position; confirm the final calculation before filing.</p>
 </section>
 {% endblock %}

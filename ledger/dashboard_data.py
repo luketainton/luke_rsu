@@ -90,6 +90,7 @@ def _dashboard_summary_legacy(vests, sales):
     pool_units = ZERO
     pool_cost = ZERO
     incomplete_sales = 0
+    incomplete_sale_details = []
 
     for _, event_type, event in sorted(events, key=lambda item: (item[0], item[1], item[2].id)):
         year = financial_year(event.date)
@@ -109,6 +110,9 @@ def _dashboard_summary_legacy(vests, sales):
         if proceeds is None or pool_units <= ZERO or event.units > pool_units:
             summary.incomplete_sales += 1
             incomplete_sales += 1
+            incomplete_sale_details.append(
+                f"Sale on {event.date} (incomplete proceeds or pool match)"
+            )
             continue
 
         cost = pool_cost * event.units / pool_units
@@ -135,6 +139,7 @@ def _dashboard_summary_legacy(vests, sales):
         "held_units": pool_units,
         "pool_cost": pool_cost,
         "incomplete_sales": incomplete_sales,
+        "incomplete_sale_details": incomplete_sale_details,
         "tax_years": sorted(summaries, key=lambda item: item.label, reverse=True),
     }
 
@@ -214,6 +219,7 @@ def dashboard_summary(
             else vest.units - vest.withheld_units,
         )
     incomplete_sales = 0
+    incomplete_sale_details = []
     for report in reports:
         for disposal in report.disposals:
             year = financial_year(event_date(disposal.sale))
@@ -225,6 +231,15 @@ def dashboard_summary(
             if proceeds is None or gain is None or disposal.warnings:
                 summary.incomplete_sales += 1
                 incomplete_sales += 1
+                sale = disposal.sale
+                broker = getattr(getattr(sale, "broker", None), "name", None)
+                details = [f"Sale on {event_date(sale)}"]
+                if broker:
+                    details.append(broker)
+                if getattr(sale, "grant_id", None):
+                    details.append(f"grant {sale.grant_id}")
+                reason = "; ".join(disposal.warnings) or "Incomplete disposal."
+                incomplete_sale_details.append(f"{' — '.join(details)}: {reason}")
                 continue
             summary.proceeds += proceeds
             summary.allowable_cost += proceeds - gain
@@ -248,6 +263,7 @@ def dashboard_summary(
             (report.pool_cost for report in reports if report.pool_cost is not None), ZERO
         ),
         "incomplete_sales": incomplete_sales,
+        "incomplete_sale_details": incomplete_sale_details,
         "tax_years": sorted(summaries, key=lambda item: item.label, reverse=True),
     }
 
