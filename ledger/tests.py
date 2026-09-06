@@ -557,6 +557,38 @@ class WorkspaceIsolationTests(TestCase):
         self.assertContains(response, "Section 104 pool")
         self.assertContains(response, "30-day")
 
+    def test_section_104_matches_later_acquisition_after_30_days(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        broker = Broker.objects.create(workspace=workspace, name="Charles Schwab")
+        security = Security.objects.create(workspace=workspace, name="Microsoft", ticker="MSFT")
+        grant = Grant.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id="MSFT-LATER",
+            security=security,
+            date=date(2026, 1, 1),
+            units=10,
+        )
+        vest = Vest.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id=grant.grant_id,
+            date=date(2026, 7, 15),
+            units=3,
+            usd_price=100,
+        )
+        sale = Sale.objects.create(
+            workspace=workspace,
+            broker=broker,
+            grant_id=grant.grant_id,
+            date=date(2026, 6, 1),
+            units=3,
+            usd_price=120,
+        )
+        report = section_104_report(security, [grant], [vest], [sale])
+        self.assertEqual(report.disposals[0].matches[0].kind, "Later acquisition")
+        self.assertEqual(report.pool_units, Decimal(0))
+
     def test_section_104_uses_direct_event_security_without_a_grant_id(self):
         from .models import Security
 

@@ -73,7 +73,7 @@ Run quality checks with `uv run ruff check .`, `uv run python manage.py check`, 
 
 ## Tax scope
 
-This is a record-keeping aid, not tax advice or a completed Self Assessment return. Retain employer/broker documents and the FX source for every event. The Overview dashboard's gain/loss and CGT figures are estimates only: it uses a chronological average-cost pool of net vested shares and does not apply same-day or 30-day share matching, losses brought forward, or the user's taxable-income position. Confirm the final calculation before filing.
+This is a record-keeping aid, not tax advice or a completed Self Assessment return. Retain employer/broker documents and the FX source for every event. The Overview dashboard's gain/loss and CGT figures are estimates: linked records use HMRC same-day, following-30-day, Section 104 and later-acquisition matching. They include losses arising in this ledger and the annual exempt amount, but cannot know about gains or losses outside the ledger, losses previously claimed or carried forward, or the user's taxable-income position. Confirm the final calculation before filing.
 
 The Section 104 working paper applies same-day and following-30-day matching before the residual
 pool for Grants linked to a Security. It assumes a Vest acquires its net released shares after

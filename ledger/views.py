@@ -154,13 +154,28 @@ def dashboard(request):
     grants = list(Grant.objects.filter(workspace=workspace).select_related("broker", "security"))
     vests = list(Vest.objects.filter(workspace=workspace).order_by("date", "id"))
     sales = list(Sale.objects.filter(workspace=workspace).order_by("date", "id"))
+    securities = list(Security.objects.filter(workspace=workspace))
+    purchases = list(Purchase.objects.filter(workspace=workspace))
+    adjustments = list(PoolAdjustment.objects.filter(workspace=workspace))
+    opening_balances = {
+        balance.security_id: balance
+        for balance in Section104OpeningBalance.objects.filter(workspace=workspace)
+    }
     positions = ticker_positions(
         grants,
         vests,
         sales,
         StockPrice.objects.filter(workspace=workspace),
     )
-    summary = dashboard_summary(vests, sales)
+    summary = dashboard_summary(
+        vests,
+        sales,
+        grants=grants,
+        securities=securities,
+        opening_balances=opening_balances,
+        purchases=purchases,
+        adjustments=adjustments,
+    )
     context = {
         "membership": member,
         "grant_count": len(grants),

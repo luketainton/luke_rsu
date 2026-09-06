@@ -1,9 +1,4 @@
-"""Calculations used by the private workspace overview dashboard.
-
-These are intentionally estimates: they use a chronological average-cost pool of
-net vested shares.  They do not replace HMRC's same-day, 30-day or section 104
-share-identification calculation.
-"""
+"""Calculations used by the private workspace overview dashboard."""
 
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -11,6 +6,7 @@ from datetime import date
 from decimal import Decimal
 
 from .broker_rules import grant_accepts_event_broker
+from .section104 import event_date, event_security, sale_proceeds, section_104_report
 
 ZERO = Decimal(0)
 
@@ -87,8 +83,8 @@ def gbp_value(record, units):
     return units * record.usd_price * record.gbp_per_usd
 
 
-def dashboard_summary(vests, sales):
-    """Build position and per-tax-year realised CGT estimates from ledger events."""
+def _dashboard_summary_legacy(vests, sales):
+    """Build the pre-HMRC dashboard estimate for backwards-compatible callers."""
     summaries = defaultdict(lambda: TaxYearSummary(label=""))
     events = [(vest.date, 0, vest) for vest in vests] + [(sale.date, 1, sale) for sale in sales]
     pool_units = ZERO
@@ -138,6 +134,119 @@ def dashboard_summary(vests, sales):
     return {
         "held_units": pool_units,
         "pool_cost": pool_cost,
+        "incomplete_sales": incomplete_sales,
+        "tax_years": sorted(summaries, key=lambda item: item.label, reverse=True),
+    }
+
+
+def dashboard_summary(
+    vests,
+    sales,
+    grants=None,
+    securities=None,
+    opening_balances=None,
+    purchases=None,
+    adjustments=None,
+):
+    """Build dashboard results using HMRC matching when grant data is available.
+
+    The legacy two-argument form is retained for small callers that do not have
+    Security/Grant context.  The dashboard passes the full workspace context,
+    allowing same-day, 30-day and Section 104 matching to be reflected in the
+    realised gains.
+    """
+    if grants is None or (not grants and not securities):
+        return _dashboard_summary_legacy(vests, sales)
+
+    securities_by_id = {security.id: security for security in (securities or [])}
+    for event in [*vests, *sales]:
+        security = event_security(event, grants)
+        if security:
+            securities_by_id[security.id] = security
+    reports = []
+    for security in securities_by_id.values():
+        events = [event for event in [*vests, *sales] if event_security(event, grants) == security]
+        identities = {
+            (
+                getattr(event, "beneficial_owner", ""),
+                getattr(event, "capacity", "personal"),
+                getattr(event, "account_reference", ""),
+            )
+            for event in events
+        }
+        opening = (opening_balances or {}).get(security.id)
+        if len(identities) <= 1:
+            reports.append(
+                section_104_report(
+                    security,
+                    grants,
+                    vests,
+                    sales,
+                    opening,
+                    purchases,
+                    adjustments,
+                )
+            )
+        else:
+            reports.extend(
+                section_104_report(
+                    security,
+                    grants,
+                    vests,
+                    sales,
+                    None,
+                    purchases,
+                    adjustments,
+                    identity,
+                )
+                for identity in sorted(identities)
+            )
+
+    summaries = defaultdict(lambda: TaxYearSummary(label=""))
+    for vest in vests:
+        year = financial_year(event_date(vest))
+        summary = summaries[year]
+        summary.label = year
+        summary.vested_units += max(
+            ZERO,
+            vest.units
+            if getattr(vest, "withholding_treatment", "net") == "gross_sell_to_cover"
+            else vest.units - vest.withheld_units,
+        )
+    incomplete_sales = 0
+    for report in reports:
+        for disposal in report.disposals:
+            year = financial_year(event_date(disposal.sale))
+            summary = summaries[year]
+            summary.label = year
+            summary.sold_units += disposal.sale.units
+            proceeds = sale_proceeds(disposal.sale)
+            gain = disposal.gain_or_loss
+            if proceeds is None or gain is None or disposal.warnings:
+                summary.incomplete_sales += 1
+                incomplete_sales += 1
+                continue
+            summary.proceeds += proceeds
+            summary.allowable_cost += proceeds - gain
+            summary.gain_or_loss += gain
+            for match in disposal.matches:
+                if match.gain_or_loss is not None:
+                    summary.gain_components.append(
+                        (match.gain_or_loss, *cgt_rates(event_date(disposal.sale)))
+                    )
+    summaries = list(summaries.values())
+    for summary in summaries:
+        summary.lower_rate_cgt, summary.higher_rate_cgt = estimated_cgt(summary)
+    largest_result = max((abs(summary.gain_or_loss) for summary in summaries), default=ZERO)
+    for summary in summaries:
+        summary.chart_width = (
+            0 if largest_result == ZERO else int(abs(summary.gain_or_loss) / largest_result * 100)
+        )
+    return {
+        "held_units": sum((report.pool_units for report in reports), ZERO),
+        "pool_cost": sum(
+            (report.pool_cost for report in reports if report.pool_cost is not None), ZERO
+        ),
         "incomplete_sales": incomplete_sales,
         "tax_years": sorted(summaries, key=lambda item: item.label, reverse=True),
     }

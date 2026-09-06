@@ -43,6 +43,6 @@
   </div>
   {% else %}<p class="muted">Add vest and sale records with USD prices to begin estimating performance and CGT.</p>{% endif %}
   {% if incomplete_sales %}<p class="message">{{ incomplete_sales }} sale{{ incomplete_sales|pluralize }} cannot yet be included in the estimate because a USD price/rate or sufficient vested shares are missing.</p>{% endif %}
-  <p class="muted small-print">Estimate only: uses a chronological average-cost pool of net vested shares, less recorded sale fees. It does not apply HMRC same-day or 30-day share matching, losses brought forward, or your taxable-income position. The range shows the main lower and higher CGT rates after the annual exempt amount (£{{ tax_years.0.annual_exempt_amount|floatformat:0 }} where applicable); confirm the final calculation before filing.</p>
+  <p class="muted small-print">Estimate only: linked records use HMRC same-day, following-30-day and Section 104 matching, with later acquisitions as the final fallback. It includes losses arising in this ledger and the annual exempt amount, but does not know about gains or losses outside this ledger, losses previously claimed or carried forward, or your taxable-income position. The CGT range is therefore conditional on your wider tax position; confirm the final calculation before filing.</p>
 </section>
 {% endblock %}

@@ -275,6 +275,39 @@ def section_104_report(
                     )
                 )
                 remaining -= units
+        # HMRC's final fallback is to match any still-unmatched disposal
+        # against later acquisitions, oldest first.  Acquisitions already
+        # reserved by the same-day or 30-day rules have no remaining units.
+        if remaining > ZERO:
+            candidates = sorted(
+                (
+                    acquisition
+                    for acquisition in acquisitions
+                    if event_date(acquisition.vest) > event_date(disposal.sale)
+                    and acquisition.remaining > ZERO
+                ),
+                key=lambda acquisition: (event_date(acquisition.vest), acquisition.vest.id),
+            )
+            for acquisition in candidates:
+                if remaining <= ZERO:
+                    break
+                units = min(remaining, acquisition.remaining)
+                cost = (
+                    None
+                    if acquisition.cost is None
+                    else acquisition.cost * units / acquisition.units
+                )
+                acquisition.remaining -= units
+                disposal.matches.append(
+                    Match(
+                        kind="Later acquisition",
+                        units=units,
+                        cost=cost,
+                        proceeds=None,
+                        acquisition_date=event_date(acquisition.vest),
+                    )
+                )
+                remaining -= units
         disposal._pool_units = remaining
 
     pool_units = ZERO if opening_balance is None else opening_balance.units
@@ -310,7 +343,7 @@ def section_104_report(
         acquisitions_by_date[event_date(acquisition.vest)].append(acquisition)
     disposals_by_date = defaultdict(list)
     for disposal in disposals:
-        disposals_by_date[disposal.sale.date].append(disposal)
+        disposals_by_date[event_date(disposal.sale)].append(disposal)
     adjustments_by_date = defaultdict(list)
     for adjustment in relevant_adjustments:
         adjustments_by_date[adjustment.effective_on].append(adjustment)
