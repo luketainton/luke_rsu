@@ -2,8 +2,19 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "development-only-change-me")
+
+
+def _required_secret_key():
+    secret_key = os.environ.get("DJANGO_SECRET_KEY")
+    if not secret_key or secret_key == "development-only-change-me":
+        raise ImproperlyConfigured("DJANGO_SECRET_KEY must be set to a unique value")
+    return secret_key
+
+
+SECRET_KEY = _required_secret_key()
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = [
     host for host in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host

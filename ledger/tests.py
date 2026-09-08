@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
@@ -31,6 +32,29 @@ from .models import (
 )
 from .scim import ScimBearerAuthMiddleware
 from .section104 import event_security, section_104_report
+
+
+class SettingsSecurityTests(TestCase):
+    def test_secret_key_rejects_missing_value(self):
+        from config.settings import _required_secret_key
+
+        with patch.dict(os.environ, {}, clear=True), self.assertRaises(ImproperlyConfigured):
+            _required_secret_key()
+
+    def test_secret_key_rejects_known_placeholder(self):
+        from config.settings import _required_secret_key
+
+        with (
+            patch.dict(os.environ, {"DJANGO_SECRET_KEY": "development-only-change-me"}),
+            self.assertRaises(ImproperlyConfigured),
+        ):
+            _required_secret_key()
+
+    def test_secret_key_accepts_configured_value(self):
+        from config.settings import _required_secret_key
+
+        with patch.dict(os.environ, {"DJANGO_SECRET_KEY": "unique-test-secret"}):
+            self.assertEqual(_required_secret_key(), "unique-test-secret")
 
 
 class SsoLoginTests(TestCase):

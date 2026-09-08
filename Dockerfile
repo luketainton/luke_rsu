@@ -9,6 +9,6 @@ COPY config ./config
 COPY ledger ./ledger
 COPY templates ./templates
 COPY manage.py ./
-RUN uv run python manage.py collectstatic --noinput
+RUN DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')" uv run python manage.py collectstatic --noinput
 EXPOSE 8000
 CMD ["/bin/sh", "-c", "uv run python manage.py migrate --noinput && uv run gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"]

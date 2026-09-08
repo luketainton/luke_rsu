@@ -1,5 +1,9 @@
 """Django settings used exclusively by the automated test suite."""
 
+import os
+
+os.environ.setdefault("DJANGO_SECRET_KEY", "test-only-django-secret-key")
+
 from .settings import *
 
 DATABASES = {
