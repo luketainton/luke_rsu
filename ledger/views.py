@@ -185,6 +185,7 @@ def dashboard(request):
         "pool_cost": summary["pool_cost"],
         "tax_years": summary["tax_years"],
         "incomplete_sales": summary["incomplete_sales"],
+        "incomplete_sale_details": summary["incomplete_sale_details"],
         "ticker_positions": positions,
         "market_value_usd": sum(
             (position.market_value for position in positions if position.market_value is not None),

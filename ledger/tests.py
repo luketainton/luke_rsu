@@ -440,6 +440,16 @@ class WorkspaceIsolationTests(TestCase):
         self.assertContains(response, own_grant.notes)
         self.assertNotContains(response, "2026-01-01")
 
+    def test_dashboard_identifies_incomplete_sales(self):
+        workspace = self.bob.workspace_memberships.get().workspace
+        Sale.objects.create(workspace=workspace, date=date(2026, 6, 1), units=1)
+
+        self.client.force_login(self.bob)
+        response = self.client.get(reverse("dashboard"))
+
+        self.assertContains(response, "1 sale cannot yet be included")
+        self.assertContains(response, "Sale on 2026-06-01")
+
     def test_dashboard_estimates_realised_gain_using_the_vested_share_pool(self):
         workspace = self.bob.workspace_memberships.get().workspace
         FxRate.objects.create(
