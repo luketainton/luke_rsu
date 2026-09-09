@@ -8,6 +8,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
     path("", views.dashboard, name="dashboard"),
+    path("what-if/", views.transaction_simulation, name="transaction_simulation"),
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
     path("ledgers/switch/", views.switch_workspace, name="switch_workspace"),

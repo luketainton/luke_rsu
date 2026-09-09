@@ -11,6 +11,7 @@
     {% endif %}
   </div>
 </header>
+<p><a href="{% url 'transaction_simulation' %}">What if I make a transaction?</a> Preview its effect without changing the ledger.</p>
 <section class="summary-grid">
   <div class="card"><span class="muted">Current holding</span><p class="summary-value">{{ held }}</p><span class="muted">shares</span></div>
   <div class="card"><span class="muted">Estimated pooled cost</span><p class="summary-value">£{{ pool_cost|floatformat:2 }}</p><span class="muted">net vested shares</span></div>

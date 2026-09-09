@@ -28,6 +28,7 @@ from .forms import (
     SaleForm,
     Section104OpeningBalanceForm,
     SecurityForm,
+    SimulationForm,
     StockPriceForm,
     VestForm,
     WiseRateFetchForm,
@@ -59,6 +60,7 @@ from .models import (
     WorkspaceMembership,
 )
 from .section104 import event_date, event_security, section_104_report
+from .simulation import simulate_transaction
 from .wise import WiseRateUnavailable
 from .wise import fetch_usd_rate as fetch_wise_usd_rate
 from .workspaces import active_membership, membership_for_workspace
@@ -196,6 +198,42 @@ def dashboard(request):
     }
     context["held"] = summary["held_units"]
     return render(request, "ledger/dashboard.html", context)
+
+
+@login_required
+def transaction_simulation(request):
+    member = request_membership(request)
+    form = SimulationForm(request.POST or None, workspace=member.workspace)
+    result = None
+    if request.method == "POST" and form.is_valid():
+        workspace = member.workspace
+        grants = list(
+            Grant.objects.filter(workspace=workspace).select_related("broker", "security")
+        )
+        vests = list(Vest.objects.filter(workspace=workspace).order_by("date", "id"))
+        sales = list(Sale.objects.filter(workspace=workspace).order_by("date", "id"))
+        purchases = list(Purchase.objects.filter(workspace=workspace))
+        securities = list(Security.objects.filter(workspace=workspace))
+        opening = Section104OpeningBalance.objects.filter(
+            workspace=workspace, security=form.cleaned_data["security"]
+        ).first()
+        adjustments = list(PoolAdjustment.objects.filter(workspace=workspace))
+        result = simulate_transaction(
+            form.cleaned_data["transaction"],
+            workspace,
+            form.cleaned_data["security"],
+            grants,
+            vests,
+            sales,
+            purchases,
+            securities,
+            opening,
+            adjustments,
+            form.cleaned_data,
+        )
+    return render(
+        request, "ledger/simulation.html", {"membership": member, "form": form, "result": result}
+    )
 
 
 def filtered_table(request, queryset, search_fields, sort_options, default_sort):

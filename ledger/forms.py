@@ -150,8 +150,45 @@ class PurchaseForm(forms.ModelForm):
         ]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
+            "contract_date": forms.DateInput(attrs={"type": "date"}),
             "notes": forms.Textarea(attrs={"rows": 2}),
         }
+
+
+class SimulationForm(forms.Form):
+    TRANSACTION_CHOICES = [
+        ("sale", "Sale"),
+        ("purchase", "Purchase"),
+        ("vest", "Vest"),
+    ]
+
+    security = forms.ModelChoiceField(queryset=Security.objects.none(), label="Security")
+    transaction = forms.ChoiceField(choices=TRANSACTION_CHOICES, label="Transaction")
+    date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
+    units = forms.DecimalField(max_digits=16, decimal_places=4, min_value=0)
+    usd_price = forms.DecimalField(max_digits=16, decimal_places=6, required=False)
+    capital_cost_gbp = forms.DecimalField(max_digits=16, decimal_places=2, required=False)
+    proceeds_gbp = forms.DecimalField(max_digits=16, decimal_places=2, required=False)
+    fees_gbp = forms.DecimalField(max_digits=16, decimal_places=2, required=False, initial=0)
+
+    def __init__(self, *args, workspace, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["security"].queryset = Security.objects.filter(workspace=workspace)
+
+    def clean(self):
+        cleaned = super().clean()
+        transaction = cleaned.get("transaction")
+        if transaction in {"purchase", "vest"} and not (
+            cleaned.get("capital_cost_gbp") is not None or cleaned.get("usd_price") is not None
+        ):
+            raise forms.ValidationError(
+                "Enter either a GBP cost or a USD price for this acquisition."
+            )
+        if transaction == "sale" and not (
+            cleaned.get("proceeds_gbp") is not None or cleaned.get("usd_price") is not None
+        ):
+            raise forms.ValidationError("Enter either GBP proceeds or a USD sale price.")
+        return cleaned
 
 
 class PoolAdjustmentForm(forms.ModelForm):
