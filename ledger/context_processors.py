@@ -1,4 +1,11 @@
+from django.conf import settings
+
 from .workspaces import active_membership, memberships_for
+
+
+def app_version(request):
+    """Make the deployed release version available to shared navigation."""
+    return {"app_version": settings.APP_VERSION}
 
 
 def workspace_membership(request):

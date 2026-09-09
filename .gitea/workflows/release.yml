@@ -80,9 +80,13 @@ jobs:
             "${GITEA_API_URL}/repos/${GITEA_REPOSITORY}/releases"
 
       - name: Set package version from release tag
+        id: set-version
         env:
           RELEASE_TAG: ${{ gitea.ref_name }}
-        run: uv version "${RELEASE_TAG#v}"
+        run: |
+          release_version="${RELEASE_TAG#v}"
+          uv version "${release_version}"
+          echo "version=${release_version}" >> "${GITHUB_OUTPUT}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -99,6 +103,8 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            APP_VERSION=${{ steps.set-version.outputs.version }}
           platforms: linux/amd64,linux/arm64
           tags: |
             ${{ vars.PACKAGES_REGISTRY_URL }}/${{ gitea.repository }}:${{ gitea.ref_name }}

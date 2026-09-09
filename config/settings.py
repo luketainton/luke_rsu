@@ -1,10 +1,14 @@
 import os
+import tomllib
 from pathlib import Path
 from urllib.parse import urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+with (BASE_DIR / "pyproject.toml").open("rb") as project_file:
+    PROJECT_VERSION = tomllib.load(project_file)["project"]["version"]
+APP_VERSION = f"v{os.environ.get('APP_VERSION', PROJECT_VERSION).removeprefix('v')}"
 
 
 def _required_secret_key():
@@ -56,6 +60,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "ledger.context_processors.app_version",
                 "ledger.context_processors.workspace_membership",
             ]
         },
