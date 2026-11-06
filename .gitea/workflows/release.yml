@@ -85,7 +85,8 @@ jobs:
           RELEASE_TAG: ${{ gitea.ref_name }}
         run: |
           release_version="${RELEASE_TAG#v}"
-          uv version "${release_version}"
+          # Dependencies are installed in the Python 3.14 Docker image.
+          uv version --no-sync "${release_version}"
           echo "version=${release_version}" >> "${GITHUB_OUTPUT}"
 
       - name: Set up Docker Buildx
