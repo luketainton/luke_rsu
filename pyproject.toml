@@ -8,7 +8,7 @@ dependencies = [
   "django-allauth[socialaccount]>=65.12,<66",
   "gunicorn>=26,<27",
   "psycopg[binary]>=3.2,<4",
-  "django-scim2>=0.23,<0.24",
+  "django-scim2>=0.24,<0.25",
   "whitenoise>=6.9,<7",
   "openpyxl>=3.1,<4",
 ]

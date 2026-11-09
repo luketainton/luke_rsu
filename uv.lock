@@ -355,16 +355,16 @@ socialaccount = [
 
 [[package]]
 name = "django-scim2"
-version = "0.23.0"
+version = "0.24.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
     { name = "pygments" },
     { name = "scim2-filter-parser" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e6/a8/6f17eda83638fe47eea87aca5b5dcb0b5092c3db7552f92d35e2a278d69f/django_scim2-0.23.0.tar.gz", hash = "sha256:d3e2a405b705c2445e69b2b5e6105463b63339cd735c7a2edd5dfa4c52f60c0c", size = 26076, upload-time = "2026-08-12T15:03:38.648Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/89/49/9d968203a0fecbe18a5ecb72fb18540372f9732a57aecedb12e0cda949a1/django_scim2-0.24.0.tar.gz", hash = "sha256:827fc17df7ea44359d6d51a60cf8fbec5f61f5e300fc26995fa8d5b9a09ba06c", size = 26219, upload-time = "2026-11-09T19:15:29.075Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/00/27/9e5c0f4a99ded1cdc1310f58fb731551e8cec30a932a9c382e783985171f/django_scim2-0.23.0-py3-none-any.whl", hash = "sha256:0b537bd8a9d38fc8ba59fa983bf1e27bf022baaa70198174b953edc32651ebdb", size = 32135, upload-time = "2026-08-12T15:03:39.596Z" },
+    { url = "https://files.pythonhosted.org/packages/05/64/26a40b6ac18978eeb2f8158dce977702e87b9fcca1981c6b8c542700799b/django_scim2-0.24.0-py3-none-any.whl", hash = "sha256:619fa07ca2cf49e663d1c3dd030c6a4922130b4472cab60a9b389e91a5855db6", size = 32211, upload-time = "2026-11-09T19:15:30.11Z" },
 ]
 
 [[package]]
@@ -680,7 +680,7 @@ dev = [
 requires-dist = [
     { name = "django", specifier = ">=6.0,<6.1" },
     { name = "django-allauth", extras = ["socialaccount"], specifier = ">=65.12,<66" },
-    { name = "django-scim2", specifier = ">=0.23,<0.24" },
+    { name = "django-scim2", specifier = ">=0.24,<0.25" },
     { name = "gunicorn", specifier = ">=26,<27" },
     { name = "openpyxl", specifier = ">=3.1,<4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
