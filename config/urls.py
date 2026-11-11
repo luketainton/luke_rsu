@@ -2,9 +2,10 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 
-from ledger import views
+from ledger import mcp, views
 
 urlpatterns = [
+    path("mcp", mcp.endpoint, name="mcp"),
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
     path("", views.dashboard, name="dashboard"),

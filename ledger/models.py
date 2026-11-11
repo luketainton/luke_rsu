@@ -44,6 +44,12 @@ class WorkspaceMembership(models.Model):
         ]
 
 
+class MCPApiKey(models.Model):
+    membership = models.ForeignKey(WorkspaceMembership, on_delete=models.CASCADE)
+    digest = models.CharField(max_length=64, unique=True, editable=False)
+    expires_at = models.DateTimeField()
+
+
 class Broker(models.Model):
     """A broker available to one workspace's records."""
 

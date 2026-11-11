@@ -85,3 +85,36 @@ Useful references:
 - [HMRC CGT foreign currency guidance](https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg78310)
 - [HMRC share identification guidance](https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg51550)
 - [HMRC CGT rates and annual exempt amount](https://www.gov.uk/guidance/capital-gains-tax-rates-and-allowances)
+
+## MCP server
+
+RSU serves a stateless MCP Streamable HTTP endpoint at `https://<rsu-host>/mcp`.
+It supports native MCP clients that can send a custom Authorization header. Use HTTPS
+outside local development. Browser-origin requests are rejected.
+
+The read-only tools are `list_grants`, `list_vests`, `list_sales`, and
+`list_purchases`. Each key is bound to one active RSU user's membership of one
+ledger. Results include `workspace_id`, `records`, and `next_after_id`.
+Pass `next_after_id` back as `after_id` to get the next page. A null cursor
+means the last page has been returned. The optional `limit` defaults to 50
+and accepts 1–100.
+
+After deploying the updated app and running its migrations, issue a key as an app
+operator. Use the numeric workspace ID from the ledger switcher.
+
+```sh
+docker compose exec app uv run python manage.py mcp_key issue user@example.com 123
+```
+
+The command prints the key once on stdout and its ID and expiration on stderr.
+Store the key in the MCP client's secret store and configure the client to send
+`Authorization: Bearer <key>` on every request to `/mcp`. The reverse proxy must
+forward that header to RSU. RSU stores the key's digest and expires it after 90 days.
+Removing the workspace membership deletes its keys. A deactivated account cannot
+use its keys.
+
+To revoke a key immediately or finish rotating it after setting up a replacement:
+
+```sh
+docker compose exec app uv run python manage.py mcp_key revoke <key-id>
+```
