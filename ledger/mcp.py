@@ -7,18 +7,28 @@ from hashlib import sha256
 from django.conf import settings
 from django.core.exceptions import RequestDataTooBig
 from django.core.serializers.json import DjangoJSONEncoder
+from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 
+from .mcp_writes import MAX_ID, can_write, write_record, write_tools
 from .models import Grant, MCPApiKey, Purchase, Sale, Vest
 
 PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
-MAX_ID = 2**63 - 1
 MAX_BODY_BYTES = 16_384
 KEY_PATTERN = re.compile(r"Bearer (rsu_mcp_[A-Za-z0-9_-]{43})", re.IGNORECASE | re.ASCII)
-COMMON_FIELDS = ("id", "grant_id", "date", "contract_date", "units", "usd_price", "security_id")
+COMMON_FIELDS = (
+    "id",
+    "grant_id",
+    "date",
+    "contract_date",
+    "units",
+    "usd_price",
+    "security_id",
+    "broker_id",
+)
 RECORDS = {
     "grants": (Grant, ()),
     "vests": (
@@ -37,7 +47,7 @@ RECORDS = {
     "purchases": (Purchase, ("capital_cost_gbp", "fees_gbp")),
 }
 
-TOOLS = [
+READ_TOOLS = [
     {
         "name": f"list_{name}",
         "description": (
@@ -92,13 +102,45 @@ def list_records(params, workspace_id):
         "records": rows[:limit],
         "next_after_id": rows[limit - 1]["id"] if len(rows) > limit else None,
     }
+    return data
+
+
+def tool_result(data):
     return {
         "structuredContent": data,
         "content": [{"type": "text", "text": json.dumps(data, cls=DjangoJSONEncoder)}],
+        "isError": "errors" in data,
     }
 
 
-def dispatch(message, workspace_id):
+def authenticate(digest, *, lock=False):
+    keys = MCPApiKey.objects.select_related("membership__workspace")
+    if lock:
+        keys = keys.select_related("membership__user").select_for_update()
+    return keys.filter(
+        digest=digest,
+        expires_at__gt=timezone.now(),
+        membership__user__is_active=True,
+    ).first()
+
+
+def call_tool(params, key):
+    name = params.get("name")
+    if not isinstance(name, str):
+        raise TypeError("Tool name must be a string.")
+    if name.startswith("list_"):
+        return list_records(params, key.membership.workspace_id)
+    if not can_write(key):
+        raise PermissionError("Write access is disabled for this key.")
+    with transaction.atomic():
+        # Recheck consent and account access under the same lock as the write.
+        locked_key = authenticate(key.digest, lock=True)
+        if locked_key is None:
+            raise PermissionError("This key no longer has access.")
+        return write_record(name, params.get("arguments"), locked_key)
+
+
+def dispatch(message, key):
     if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
         return rpc_error(None, -32600, "Invalid Request", status=400)
 
@@ -125,11 +167,13 @@ def dispatch(message, workspace_id):
     elif method == "ping":
         result = {}
     elif method == "tools/list":
-        result = {"tools": TOOLS}
+        result = {"tools": READ_TOOLS + (list(write_tools()) if can_write(key) else [])}
     elif method == "tools/call":
         try:
-            result = list_records(params, workspace_id)
-        except ValueError as error:
+            result = tool_result(call_tool(params, key))
+        except PermissionError as error:
+            return rpc_error(request_id, -32000, str(error))
+        except (TypeError, ValueError) as error:
             return rpc_error(request_id, -32602, str(error))
     else:
         return rpc_error(request_id, -32601, "Method not found")
@@ -144,18 +188,8 @@ def endpoint(request):
         return HttpResponse(status=403)
 
     match = KEY_PATTERN.fullmatch(request.headers.get("Authorization", ""))
-    workspace_id = None
-    if match:
-        workspace_id = (
-            MCPApiKey.objects.filter(
-                digest=sha256(match[1].encode("ascii")).hexdigest(),
-                expires_at__gt=timezone.now(),
-                membership__user__is_active=True,
-            )
-            .values_list("membership__workspace_id", flat=True)
-            .first()
-        )
-    if workspace_id is None:
+    key = authenticate(sha256(match[1].encode("ascii")).hexdigest()) if match else None
+    if key is None:
         return HttpResponse(status=401, headers={"WWW-Authenticate": 'Bearer realm="RSU MCP"'})
 
     if request.method != "POST":
@@ -176,4 +210,4 @@ def endpoint(request):
         return HttpResponse(status=413)
     except ValueError, RecursionError:
         return rpc_error(None, -32700, "Parse error", status=400)
-    return dispatch(message, workspace_id)
+    return dispatch(message, key)

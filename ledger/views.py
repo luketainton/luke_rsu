@@ -63,15 +63,11 @@ from .section104 import event_date, event_security, section_104_report
 from .simulation import simulate_transaction
 from .wise import WiseRateUnavailable
 from .wise import fetch_usd_rate as fetch_wise_usd_rate
-from .workspaces import active_membership, membership_for_workspace
+from .workspaces import active_membership, can_edit, membership_for_workspace
 
 
 def request_membership(request):
     return active_membership(request)
-
-
-def can_edit(member):
-    return member.role in {"owner", "editor"}
 
 
 def return_url(request, fallback):

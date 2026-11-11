@@ -92,7 +92,7 @@ RSU serves a stateless MCP Streamable HTTP endpoint at `https://<rsu-host>/mcp`.
 It supports native MCP clients that can send a custom Authorization header. Use HTTPS
 outside local development. Browser-origin requests are rejected.
 
-The read-only tools are `list_grants`, `list_vests`, `list_sales`, and
+The read tools are `list_grants`, `list_vests`, `list_sales`, and
 `list_purchases`. Each key is bound to one active RSU user's membership of one
 ledger. Results include `workspace_id`, `records`, and `next_after_id`.
 Pass `next_after_id` back as `after_id` to get the next page. A null cursor
@@ -118,3 +118,17 @@ To revoke a key immediately or finish rotating it after setting up a replacement
 ```sh
 docker compose exec app uv run python manage.py mcp_key revoke <key-id>
 ```
+
+
+### Allow write access
+
+Keys start with read-only access. To grant write access, sign in to RSU as the user
+the key was issued for, select the ledger, and open **MCP keys** from the user menu.
+Find the key ID and select **Allow write access**. Owners and editors can grant write
+access to their own keys. Viewers can only read.
+
+An approved key can create, update, and delete grants, vests, sales, and purchases.
+Writes use the same ledger validation as the web app. For updates, supply only the
+fields to change. To withdraw consent, select **Remove write access**. RSU enforces
+the change on subsequent calls, and a client can refresh its tool list to see the
+current set of tools.
