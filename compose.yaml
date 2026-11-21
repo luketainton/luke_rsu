@@ -39,7 +39,7 @@ services:
       STOCK_PRICE_REFRESH_MINUTES: ${STOCK_PRICE_REFRESH_MINUTES:-15}
       FINNHUB_POLL_INTERVAL_SECONDS: ${FINNHUB_POLL_INTERVAL_SECONDS:-60}
   db:
-    image: postgres:18-alpine
+    image: postgres:19-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: rsu
