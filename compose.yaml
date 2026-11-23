@@ -39,13 +39,14 @@ services:
       STOCK_PRICE_REFRESH_MINUTES: ${STOCK_PRICE_REFRESH_MINUTES:-15}
       FINNHUB_POLL_INTERVAL_SECONDS: ${FINNHUB_POLL_INTERVAL_SECONDS:-60}
   db:
-    image: postgres:18-alpine
+    image: postgres:19-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: rsu
       POSTGRES_USER: rsu
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes: ["rsu-postgres:/var/lib/postgresql/data"]
+    volumes:
+      - "rsu-postgres:/var/lib/postgresql"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rsu -d rsu"]
       interval: 5s
