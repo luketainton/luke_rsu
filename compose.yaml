@@ -25,11 +25,13 @@ services:
       - "${PORT:-8000}:8000"
   finnhub-poller:
     build: .
+    healthcheck:
+      disable: true
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
-    command: ["/bin/sh", "-c", "uv run python manage.py migrate --noinput && uv run python manage.py poll_finnhub"]
+    command: ["/bin/sh", "-c", "python manage.py migrate --noinput && python manage.py poll_finnhub"]
     environment:
       POSTGRES_HOST: db
       POSTGRES_DB: rsu

@@ -4,7 +4,7 @@ import os
 
 os.environ.setdefault("DJANGO_SECRET_KEY", "test-only-django-secret-key")
 
-from .settings import *
+from .settings import *  # noqa: F403 -- inherit the full production configuration
 
 DATABASES = {
     "default": {
@@ -14,7 +14,7 @@ DATABASES = {
 }
 
 SCIM_ENABLED = True
-INSTALLED_APPS.append("django_scim")
+INSTALLED_APPS = [*INSTALLED_APPS, "django_scim"]  # noqa: F405 -- inherited above
 SCIM_SERVICE_PROVIDER = {
     "NETLOC": "testserver",
     "SCHEME": "http",

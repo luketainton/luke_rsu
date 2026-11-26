@@ -39,7 +39,7 @@ def fetch_usd_rate(requested_date):
     timestamp = datetime.combine(requested_date, time(12), UTC).strftime("%Y-%m-%dT%H:%M:%S%z")
     query = urlencode({"source": "GBP", "target": "USD", "time": timestamp})
     source_url = f"{WISE_RATES_URL}?{query}"
-    request = Request(
+    request = Request(  # noqa: S310 -- fixed HTTPS endpoint
         source_url,
         headers={
             "Authorization": f"Bearer {token}",
@@ -47,7 +47,7 @@ def fetch_usd_rate(requested_date):
         },
     )
     try:
-        with urlopen(request, timeout=15) as response:
+        with urlopen(request, timeout=15) as response:  # noqa: S310 -- fixed HTTPS endpoint
             payload = json.loads(response.read())
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
         raise WiseRateUnavailable("Wise could not provide a rate for that event date.") from exc

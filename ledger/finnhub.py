@@ -43,7 +43,7 @@ def fetch_quote(ticker):
         )
     query = urlencode({"symbol": ticker, "token": token})
     try:
-        with urlopen(f"{FINNHUB_QUOTE_URL}?{query}", timeout=15) as response:
+        with urlopen(f"{FINNHUB_QUOTE_URL}?{query}", timeout=15) as response:  # noqa: S310 -- fixed HTTPS endpoint
             payload = json.loads(response.read())
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
         raise FinnhubQuoteUnavailable(f"Finnhub could not provide a quote for {ticker}.") from exc

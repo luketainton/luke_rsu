@@ -13,7 +13,7 @@ APP_VERSION = f"v{os.environ.get('APP_VERSION', PROJECT_VERSION).removeprefix('v
 
 def _required_secret_key():
     secret_key = os.environ.get("DJANGO_SECRET_KEY")
-    if not secret_key or secret_key == "development-only-change-me":
+    if not secret_key or secret_key == "development-only-change-me":  # noqa: S105 -- reject the documented insecure example
         raise ImproperlyConfigured("DJANGO_SECRET_KEY must be set to a unique value")
     return secret_key
 

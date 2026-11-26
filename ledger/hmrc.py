@@ -52,7 +52,7 @@ def fetch_usd_rate(method, requested_date):
     year, month, starts_on, ends_on = _published_period(method, requested_date)
     api_url = API_URL.format(method=method, year=year, month=month)
     try:
-        with urlopen(api_url, timeout=15) as response:
+        with urlopen(api_url, timeout=15) as response:  # noqa: S310 -- fixed HTTPS endpoint
             content = response.read().decode("utf-8-sig")
     except (HTTPError, URLError, TimeoutError) as exc:
         raise HmrcRateUnavailable("HMRC could not provide a rate for that period.") from exc

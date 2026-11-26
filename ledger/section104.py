@@ -130,11 +130,14 @@ def section_104_report(
     ]
     relevant_sales = [sale for sale in sales if event_security(sale, grants) == security]
     if pool_identity is not None:
-        identity = lambda event: (
-            getattr(event, "beneficial_owner", ""),
-            getattr(event, "capacity", "personal"),
-            getattr(event, "account_reference", ""),
-        )
+
+        def identity(event):
+            return (
+                getattr(event, "beneficial_owner", ""),
+                getattr(event, "capacity", "personal"),
+                getattr(event, "account_reference", ""),
+            )
+
         relevant_vests = [vest for vest in relevant_vests if identity(vest) == pool_identity]
         relevant_sales = [sale for sale in relevant_sales if identity(sale) == pool_identity]
         relevant_purchases = [

@@ -72,10 +72,14 @@ class WorkspaceIsolationTests(TestCase):
     def setUp(self):
         user_model = get_user_model()
         self.alice = user_model.objects.create_user(
-            username="alice", email="alice@example.test", password="safe-password"
+            username="alice",
+            email="alice@example.test",
+            password="safe-password",  # noqa: S106 -- test-only account
         )
         self.bob = user_model.objects.create_user(
-            username="bob", email="bob@example.test", password="safe-password"
+            username="bob",
+            email="bob@example.test",
+            password="safe-password",  # noqa: S106 -- test-only account
         )
         self.alice_workspace = self.alice.workspace_memberships.get().workspace
         Vest.objects.create(
@@ -1383,7 +1387,9 @@ def schwab_transaction_history_file():
 class ImportAndRateFetchTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
-            username="importer", email="importer@example.test", password="safe-password"
+            username="importer",
+            email="importer@example.test",
+            password="safe-password",  # noqa: S106 -- test-only account
         )
         self.workspace = self.user.workspace_memberships.get().workspace
         self.client.force_login(self.user)
@@ -1560,7 +1566,9 @@ class ScimTokenTests(TestCase):
     def test_users_endpoint_lists_users_with_a_valid_bearer_token(self):
         user_model = get_user_model()
         user_model.objects.create_user(
-            username="scim-user", email="scim-user@example.test", password="safe-password"
+            username="scim-user",
+            email="scim-user@example.test",
+            password="safe-password",  # noqa: S106 -- test-only account
         )
         with patch.dict("os.environ", {"SCIM_BEARER_TOKEN": "expected"}, clear=False):
             response = self.client.get(
