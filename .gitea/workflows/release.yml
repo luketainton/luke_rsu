@@ -110,3 +110,15 @@ jobs:
           tags: |
             ${{ vars.PACKAGES_REGISTRY_URL }}/${{ gitea.repository }}:${{ gitea.ref_name }}
             ${{ vars.PACKAGES_REGISTRY_URL }}/${{ gitea.repository }}:latest
+
+  qualor:
+    name: Record release in Qualor
+    needs: publish
+    uses: actions/gha-workflows/.gitea/workflows/ci-python-unified.yml@main
+    with:
+      package-manager: uv
+      python-version: '3.14'
+      security-scan: true
+      qualor-enabled: true
+    secrets:
+      ONEPASSWORD_SERVICE_ACCOUNT_TOKEN: ${{ secrets.ONEPASSWORD_SERVICE_ACCOUNT_TOKEN }}

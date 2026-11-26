@@ -12,3 +12,7 @@ jobs:
       python-version: "3.14"
       package-manager: uv
       docker-enabled: true
+      security-scan: true
+      qualor-enabled: true
+    secrets:
+      ONEPASSWORD_SERVICE_ACCOUNT_TOKEN: ${{ secrets.ONEPASSWORD_SERVICE_ACCOUNT_TOKEN }}
