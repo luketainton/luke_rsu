@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>MCP keys for {{ membership.workspace.name }}</h1>
+  <p>Write access lets a client using the key add, edit, and delete grants, vests, sales, and purchases in this ledger.</p>
+  <table>
+    <thead><tr><th>Key ID</th><th>Expires</th><th>Access</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for key in keys %}
+        <tr>
+          <td>{{ key.pk }}</td>
+          <td>{{ key.expires_at }}</td>
+          <td>{% if key.allow_write and can_write %}Read-write{% else %}Read-only{% endif %}</td>
+          <td>
+            <form method="post" action="{% url 'mcp_key_write' key.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="workspace_id" value="{{ membership.workspace_id }}">
+              {% if key.allow_write %}
+                <button type="submit" name="access" value="read-only">Remove write access</button>
+              {% elif can_write %}
+                <button type="submit" name="access" value="read-write">Allow write access</button>
+              {% endif %}
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4">No active MCP keys for this ledger.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -23,3 +23,10 @@ def membership_for_workspace(user, workspace_id):
         .select_related("workspace")
         .first()
     )
+
+
+def can_edit(member):
+    return member is not None and member.role in {
+        WorkspaceMembership.Role.OWNER,
+        WorkspaceMembership.Role.EDITOR,
+    }
